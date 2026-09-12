@@ -31,6 +31,7 @@ export interface WeeklyPlanEntry {
 export interface WeeklyPlanVersion {
   id: string;
   effectiveFrom: IsoDate;
+  effectiveTo?: IsoDate | null;
   entries: WeeklyPlanEntry[];
 }
 
@@ -60,10 +61,14 @@ export interface CalendarItem {
   item: FocusItem;
   date: IsoDate;
   targetMinutes: number;
+  directMinutes: number;
+  contributedMinutes: number;
   actualMinutes: number;
   percent: number;
   checklist: Array<ChecklistStep & { completed: boolean }>;
   complete: boolean;
+  completionActionId?: string;
+  completionFilledMinutes?: number;
 }
 
 export interface CalendarDay {
@@ -75,5 +80,17 @@ export interface UserSettings {
   locale: "en" | "ar";
   timezone: string;
   weekStartsOn: Weekday;
+  onboardingStep: number;
   onboardingCompleted: boolean;
+}
+
+export interface CompletionAction {
+  id: string;
+  itemId: string;
+  date: IsoDate;
+  idempotencyKey: string;
+  targetMinutes: number;
+  progressMinutesBefore: number;
+  filledMinutes: number;
+  undoneAt?: string | null;
 }

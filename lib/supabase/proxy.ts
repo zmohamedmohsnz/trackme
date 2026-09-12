@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseConfig, isSupabaseConfigured } from "@/lib/env";
 
-const PUBLIC_SEGMENTS = new Set(["login", "sign-up", "forgot-password", "reset-password", "auth"]);
+const PUBLIC_SEGMENTS = new Set(["login", "signup", "forgot-password", "reset-password", "auth"]);
 
 export async function refreshSession(request: NextRequest, response: NextResponse) {
   if (!isSupabaseConfigured) return response;

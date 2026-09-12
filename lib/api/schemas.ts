@@ -8,6 +8,7 @@ export const settingsPatchSchema = z.object({
   locale: z.enum(["en", "ar"]).optional(),
   timezone: z.string().min(1).max(100).optional(),
   weekStartsOn: z.number().int().min(0).max(6).optional(),
+  onboardingStep: z.number().int().min(0).max(3).optional(),
   onboardingCompleted: z.boolean().optional(),
 }).refine((value) => Object.keys(value).length > 0, "At least one setting is required.");
 

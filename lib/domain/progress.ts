@@ -1,5 +1,6 @@
 import type {
   CalendarDay,
+  CompletionAction,
   ChecklistCompletion,
   ChecklistStep,
   DateOverride,
@@ -30,6 +31,7 @@ export interface CalendarInput {
   overrides: DateOverride[];
   timeEntries: TimeEntry[];
   checklistCompletions: ChecklistCompletion[];
+  completionActions?: CompletionAction[];
 }
 
 export function buildCalendar(input: CalendarInput): CalendarDay[] {
@@ -59,18 +61,27 @@ export function buildCalendar(input: CalendarInput): CalendarDay[] {
             .map((completion) => completion.stepId),
         );
         const checklist = ownSteps.map((step) => ({ ...step, completed: completedIds.has(step.id) }));
-        let actualMinutes = directMinutes.get(item.id) ?? 0;
+        const ownMinutes = directMinutes.get(item.id) ?? 0;
+        let contributedMinutes = 0;
         if (item.kind === "area") {
           for (const child of input.items.filter((candidate) => candidate.parentId === item.id)) {
-            actualMinutes += directMinutes.get(child.id) ?? 0;
+            contributedMinutes += directMinutes.get(child.id) ?? 0;
           }
         }
+        const actualMinutes = ownMinutes + contributedMinutes;
+        const completionAction = input.completionActions?.find(
+          (action) => action.itemId === item.id && action.date === date && !action.undoneAt,
+        );
         return {
           item,
           date,
           targetMinutes: entry.durationMinutes,
+          directMinutes: ownMinutes,
+          contributedMinutes,
           ...progress(actualMinutes, entry.durationMinutes, checklist.every((step) => step.completed)),
           checklist,
+          ...(completionAction ? { completionActionId: completionAction.id } : {}),
+          ...(completionAction ? { completionFilledMinutes: completionAction.filledMinutes } : {}),
         };
       }),
     };

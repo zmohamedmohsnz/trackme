@@ -165,7 +165,7 @@ create table public.daily_checklist_completions (
   updated_at timestamptz not null default now(),
   unique (id, user_id),
   unique (user_id, checklist_template_id, local_date),
-  constraint daily_checklist_completions_source_check check (
+  constraint daily_checklist_completions_source_action_check check (
     (source = 'manual' and completion_action_id is null)
     or (source = 'completion_auto' and completion_action_id is not null)
   ),
