@@ -1,0 +1,2 @@
+import {Sparkles} from "lucide-react";
+export function AuthShell({children}:{children:React.ReactNode}){return <main className="grid min-h-[calc(100vh-33px)] place-items-center bg-muted/30 p-4"><section className="w-full max-w-md rounded-xl border bg-card p-6 shadow-sm sm:p-8"><div className="mb-8 flex items-center gap-2 font-semibold"><span className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground"><Sparkles className="size-4"/></span>TrackMe</div>{children}</section></main>}

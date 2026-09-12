@@ -1,0 +1,2 @@
+import {describe,expect,it} from "vitest";import en from "../../messages/en.json";import ar from "../../messages/ar.json";
+describe("message catalogs",()=>{it("keep the same top-level namespaces",()=>{expect(Object.keys(ar).sort()).toEqual(Object.keys(en).sort())});it("contain Arabic calendar actions",()=>{expect(ar.Calendar.markComplete).toBe("وضع علامة مكتمل")})});
