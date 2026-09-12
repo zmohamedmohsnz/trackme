@@ -24,6 +24,7 @@ The preset is a design foundation, not a limitation. Custom layouts and componen
 # Architecture Conventions
 
 - Localized pages live under `app/[locale]`; English and Arabic must remain feature-equivalent and RTL-safe. API routes stay language-neutral under `/api/v1`.
+- Keep `/api/v1` outside next-intl locale rewriting; middleware may refresh auth but must not redirect or prefix API paths.
 - Keep scheduling and progress calculations as pure functions under `lib/domain`; route handlers should authenticate, validate, delegate, and serialize.
 - Supabase requests must use the signed-in user's cookie or bearer session so RLS applies. Never expose or use a service-role/secret key in application clients.
 - Every user-owned public table must have explicit authenticated grants, indexed ownership columns, and RLS policies that enforce `auth.uid()` for reads and writes.
