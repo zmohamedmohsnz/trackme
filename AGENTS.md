@@ -14,7 +14,7 @@ When creating or modifying UI:
 - Compose existing components to create new screens instead of rebuilding common UI primitives.
 - Use the shadcn registry/MCP to search for suitable components when needed.
 
-The preset is a design foundation, not a limitation. Custom layouts and components are allowed, but they must visually belong to the same design system. 
+The preset is a design foundation, not a limitation. Custom layouts and components are allowed, but they must visually belong to the same design system.
 
 # General Rules
 

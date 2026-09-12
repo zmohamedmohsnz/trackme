@@ -4,6 +4,8 @@
 
 This is a deliberate continuation boundary. The repository now contains a secure database/API foundation and a complete bilingual responsive UI prototype. The next session should integrate the two against a running local Supabase stack, then finish the remaining production workflows.
 
+Checkpoint commit: `db31a6b` (`feat: checkpoint trackme v1 foundation`).
+
 ## Completed
 
 - Approved design committed in `docs/superpowers/specs/2026-09-12-personal-tracking-system-design.md`.
