@@ -2,7 +2,7 @@ import {render,screen} from "@testing-library/react";
 import {NextIntlClientProvider} from "next-intl";
 import {describe,expect,it} from "vitest";
 import en from "../../messages/en.json";
-import {TaskCard} from "../../components/task-card";
+import {formatDuration,formatEntryTimestamp,TaskCard} from "../../components/task-card";
 
 describe("TaskCard",()=>{
   it("shows duration rollup and checklist progress",()=>{
@@ -13,12 +13,19 @@ describe("TaskCard",()=>{
       directMinutes:30,
       contributedMinutes:45,
       actualMinutes:75,
+      remainingMinutes:45,
       percent:62.5,
       complete:false,
       checklist:[{id:"c",itemId:"1",label:"Review",position:0,effectiveFrom:"2026-01-01",completed:true}],
+      manualEntries:[],
+      subtasks:[],
     }}/></NextIntlClientProvider>);
     expect(screen.getByText("1h 15m / 2h")).toBeInTheDocument();
     expect(screen.getByText("Checklist: 1/1")).toBeInTheDocument();
     expect(screen.getByRole("button",{name:/mark complete/i})).toBeInTheDocument();
+  });
+  it("localizes duration digits and units",()=>{
+    expect(formatDuration(75,"ar","س","د")).toBe("١س ١٥د");
+    expect(formatEntryTimestamp("2026-09-12T20:30:00Z","ar","Africa/Cairo")).toContain("١١:٣٠");
   });
 });

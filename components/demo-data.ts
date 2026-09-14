@@ -48,9 +48,9 @@ export const demoWeeklyPlan: WeeklyPlanVersion[] = [{
 function study(date: IsoDate): CalendarDay {
   const area = demoFocusItems[0];
   const subtask = demoFocusItems[1];
+  const child = {item: subtask, date, targetMinutes: 45, directMinutes: 45, contributedMinutes: 0, actualMinutes: 45, remainingMinutes: 0, percent: 100, checklist: subtask.checklist.map(step=>({...step,completed:true})), manualEntries: [], subtasks: [], complete: true};
   return {date, items: [
-    {item: area, date, targetMinutes: 120, directMinutes: 35, contributedMinutes: 45, actualMinutes: 80, percent: 66.67, checklist: area.checklist.map((step,index)=>({...step,completed:index===0})), complete: false},
-    {item: subtask, date, targetMinutes: 45, directMinutes: 45, contributedMinutes: 0, actualMinutes: 45, percent: 100, checklist: subtask.checklist.map(step=>({...step,completed:true})), complete: true},
+    {item: area, date, targetMinutes: 120, directMinutes: 35, contributedMinutes: 45, actualMinutes: 80, remainingMinutes: 40, percent: 66.67, checklist: area.checklist.map((step,index)=>({...step,completed:index===0})), manualEntries: [], subtasks: [child], complete: false},
   ]};
 }
 

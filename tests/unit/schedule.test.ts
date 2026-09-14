@@ -9,6 +9,10 @@ const versions: WeeklyPlanVersion[] = [
 
 describe("schedule resolution", () => {
   it("chooses the latest effective version", () => expect(latestPlanForDate(versions, "2026-02-09")?.id).toBe("new"));
+  it("does not select an expired or future version", () => {
+    expect(latestPlanForDate([{...versions[0],effectiveTo:"2026-01-31"}],"2026-02-09")).toBeUndefined();
+    expect(latestPlanForDate(versions,"2025-12-31")).toBeUndefined();
+  });
   it("applies add, resize and skip overrides", () => {
     expect(resolvePlanEntries("2026-02-09", versions, [
       { date: "2026-02-09", itemId: "a", operation: "resize", durationMinutes: 90 },

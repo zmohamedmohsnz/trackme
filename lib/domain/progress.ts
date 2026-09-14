@@ -1,5 +1,6 @@
 import type {
   CalendarDay,
+  CalendarItem,
   CompletionAction,
   ChecklistCompletion,
   ChecklistStep,
@@ -23,6 +24,22 @@ export function progress(actualMinutes: number, targetMinutes: number, checklist
   return { actualMinutes, percent, complete: actualMinutes >= targetMinutes && checklistComplete };
 }
 
+export interface CompletionPlan {
+  fillMinutes: number;
+  checklistStepIds: string[];
+}
+
+export function planCompletion(
+  targetMinutes: number,
+  progressMinutes: number,
+  checklist: Array<{ id: string; completed: boolean }>,
+): CompletionPlan {
+  return {
+    fillMinutes: Math.max(0, targetMinutes - progressMinutes),
+    checklistStepIds: checklist.filter((step) => !step.completed).map((step) => step.id),
+  };
+}
+
 export interface CalendarInput {
   from: IsoDate;
   to: IsoDate;
@@ -42,7 +59,9 @@ export function buildCalendar(input: CalendarInput): CalendarDay[] {
     const active = scheduled.filter((entry) => {
       const item = itemById.get(entry.itemId);
       if (!item || (item.archivedAt && item.archivedAt.slice(0, 10) <= date)) return false;
-      return item.kind !== "subtask" || (!!item.parentId && scheduledIds.has(item.parentId));
+      if (item.kind !== "subtask" || !item.parentId || !scheduledIds.has(item.parentId)) return item.kind !== "subtask";
+      const parent = itemById.get(item.parentId);
+      return !!parent && (!parent.archivedAt || parent.archivedAt.slice(0, 10) > date);
     });
 
     const directMinutes = new Map<string, number>();
@@ -50,40 +69,59 @@ export function buildCalendar(input: CalendarInput): CalendarDay[] {
       directMinutes.set(entry.itemId, (directMinutes.get(entry.itemId) ?? 0) + entry.minutes);
     }
 
+    const calendarItems: CalendarItem[] = active.map((entry) => {
+      const item = itemById.get(entry.itemId)!;
+      const ownSteps = effectiveChecklist(item.checklist, date);
+      const completedIds = new Set(
+        input.checklistCompletions
+          .filter((completion) => completion.date === date && completion.itemId === item.id)
+          .map((completion) => completion.stepId),
+      );
+      const checklist = ownSteps.map((step) => ({ ...step, completed: completedIds.has(step.id) }));
+      const ownMinutes = directMinutes.get(item.id) ?? 0;
+      const manualEntries = input.timeEntries
+        .filter((timeEntry) => timeEntry.date === date && timeEntry.itemId === item.id && timeEntry.source === "manual")
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      let contributedMinutes = 0;
+      if (item.kind === "area") {
+        for (const child of input.items.filter((candidate) => candidate.parentId === item.id)) {
+          contributedMinutes += directMinutes.get(child.id) ?? 0;
+        }
+      }
+      const actualMinutes = ownMinutes + contributedMinutes;
+      const completionPlan = planCompletion(entry.durationMinutes, actualMinutes, checklist);
+      const completionAction = input.completionActions?.find(
+        (action) => action.itemId === item.id && action.date === date && !action.undoneAt,
+      );
+      return {
+        item,
+        date,
+        targetMinutes: entry.durationMinutes,
+        remainingMinutes: completionPlan.fillMinutes,
+        directMinutes: ownMinutes,
+        contributedMinutes,
+        ...progress(actualMinutes, entry.durationMinutes, checklist.every((step) => step.completed)),
+        checklist,
+        manualEntries,
+        subtasks: [],
+        ...(completionAction ? { completionActionId: completionAction.id } : {}),
+        ...(completionAction ? { completionFilledMinutes: completionAction.filledMinutes } : {}),
+      };
+    });
+    const calendarItemById = new Map(calendarItems.map((calendarItem) => [calendarItem.item.id, calendarItem]));
+    for (const calendarItem of calendarItems) {
+      if (calendarItem.item.kind === "subtask" && calendarItem.item.parentId) {
+        calendarItemById.get(calendarItem.item.parentId)?.subtasks.push(calendarItem);
+      }
+    }
+    for (const calendarItem of calendarItems) {
+      calendarItem.subtasks.sort((a, b) => a.item.position - b.item.position);
+    }
     return {
       date,
-      items: active.map((entry) => {
-        const item = itemById.get(entry.itemId)!;
-        const ownSteps = effectiveChecklist(item.checklist, date);
-        const completedIds = new Set(
-          input.checklistCompletions
-            .filter((completion) => completion.date === date && completion.itemId === item.id)
-            .map((completion) => completion.stepId),
-        );
-        const checklist = ownSteps.map((step) => ({ ...step, completed: completedIds.has(step.id) }));
-        const ownMinutes = directMinutes.get(item.id) ?? 0;
-        let contributedMinutes = 0;
-        if (item.kind === "area") {
-          for (const child of input.items.filter((candidate) => candidate.parentId === item.id)) {
-            contributedMinutes += directMinutes.get(child.id) ?? 0;
-          }
-        }
-        const actualMinutes = ownMinutes + contributedMinutes;
-        const completionAction = input.completionActions?.find(
-          (action) => action.itemId === item.id && action.date === date && !action.undoneAt,
-        );
-        return {
-          item,
-          date,
-          targetMinutes: entry.durationMinutes,
-          directMinutes: ownMinutes,
-          contributedMinutes,
-          ...progress(actualMinutes, entry.durationMinutes, checklist.every((step) => step.completed)),
-          checklist,
-          ...(completionAction ? { completionActionId: completionAction.id } : {}),
-          ...(completionAction ? { completionFilledMinutes: completionAction.filledMinutes } : {}),
-        };
-      }),
+      items: calendarItems
+        .filter((calendarItem) => calendarItem.item.kind === "area")
+        .sort((a, b) => a.item.position - b.item.position),
     };
   });
 }

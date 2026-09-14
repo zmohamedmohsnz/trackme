@@ -3,39 +3,36 @@ import {expect,test} from "@playwright/test";
 
 const enabled=process.env.RUN_REAL_E2E==="1";
 const email=`trackme-browser-${crypto.randomUUID()}@example.test`;
+const secondEmail=`trackme-browser-two-${crypto.randomUUID()}@example.test`;
 const password="TrackMe-browser-123!";
-let userId="";
+const userIds:string[]=[];
 
 test.describe("live Supabase browser journey",()=>{
 test.skip(!enabled,"Set RUN_REAL_E2E=1 to run credentialed local browser tests.");
+test.describe.configure({mode:"serial"});
 
 test.beforeAll(async()=>{
   const url=process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key=process.env[["SERVICE","ROLE","KEY"].join("_")];
   if(!url||!key)throw new Error("The local Supabase URL and service-role key are required for live browser tests.");
   const admin=createClient(url,key,{auth:{persistSession:false}});
-  const {data,error}=await admin.auth.admin.createUser({email,password,email_confirm:true});
-  if(error)throw error;
-  userId=data.user.id;
+  for(const address of [email,secondEmail]){const {data,error}=await admin.auth.admin.createUser({email:address,password,email_confirm:true});if(error)throw error;userIds.push(data.user.id)}
 });
 
 test.afterAll(async()=>{
   const url=process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key=process.env[["SERVICE","ROLE","KEY"].join("_")];
-  if(url&&key&&userId)await createClient(url,key,{auth:{persistSession:false}}).auth.admin.deleteUser(userId);
+  if(url&&key)await Promise.all(userIds.map(userId=>createClient(url,key,{auth:{persistSession:false}}).auth.admin.deleteUser(userId)));
 });
 
 test("confirmed account completes onboarding and uses real plan data",async({page})=>{
-  await page.goto("/en/login");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button",{name:"Sign in"}).click();
+  await login(page,email);
   await expect(page).toHaveURL(/\/en\/onboarding$/);
 
-  const settingsRequest=page.waitForResponse(response=>response.url().includes("/api/v1/me/settings")&&response.request().method()==="PATCH");
+  const settingsRequest=page.waitForResponse(response=>response.url().includes("/api/v1/onboarding")&&response.request().method()==="PATCH");
   await page.getByRole("button",{name:"Continue"}).click();
   const settingsResponse=await settingsRequest;
-  if(!settingsResponse.ok())throw new Error(`Onboarding settings failed (${settingsResponse.status()}): ${await settingsResponse.text()}`);
+  if(!settingsResponse.ok())throw new Error(`Onboarding draft save failed (${settingsResponse.status()}): ${await settingsResponse.text()}`);
   const areaInput=page.getByPlaceholder("e.g. Deep work");
   await expect(areaInput).toBeVisible({timeout:5_000}).catch(async()=>{throw new Error(`Onboarding did not advance. Page content: ${await page.locator("body").innerText()}`)});
   await areaInput.fill("Software");
@@ -47,11 +44,82 @@ test("confirmed account completes onboarding and uses real plan data",async({pag
   await page.getByRole("button",{name:"Finish setup"}).click();
 
   await expect(page).toHaveURL(/\/en\/calendar$/);
-  if((page.viewportSize()?.width??1024)<768)await page.getByRole("button",{name:String(new Date().getDate()),exact:true}).click();
+  if((page.viewportSize()?.width??1024)<768)await page.locator('[data-testid="phone-month-indicators"]:has(span[title])').first().locator("..").click();
   await expect((page.viewportSize()?.width??1024)<768?page.getByRole("dialog").getByRole("heading",{name:"Software"}):page.getByText("Software").first()).toBeVisible();
   await page.goto("/en/weekly-plan");
   await expect(page.getByText("Software").first()).toBeVisible();
   await expect(page.getByText("Build TrackMe").first()).toBeVisible();
+});
+
+test("tracks Month and Week, edits schedules and checklists, completes, deletes, and archives",async({page},testInfo)=>{
+  await login(page,email);
+  const items=await apiData<Array<{id:string;name:string}>>(await page.request.get("/api/v1/focus-items"));
+  const area=items.find(item=>item.name==="Software");
+  if(!area)throw new Error("Onboarded Software focus area was not found.");
+  const today=localDate("Africa/Cairo");
+  await expect(await page.request.put(`/api/v1/date-overrides/${today}/${area.id}`,{data:{operation:"add",durationMinutes:60}})).toBeOK();
+
+  await page.goto("/en/calendar");
+  await expect(page.getByTestId("month-view")).toBeVisible();
+  const mobile=testInfo.project.name==="mobile";
+  if(mobile)await expect(page.locator(`[data-date="${today}"]`).getByTestId("phone-month-indicators")).toBeVisible();
+  else await expect(page.getByText("Software").first()).toBeVisible();
+
+  await page.locator(`[data-date="${today}"]`).click();
+  const dialog=page.getByRole("dialog",{name:"Day details"});
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("spinbutton",{name:"Minutes",exact:true}).fill("15");
+  await dialog.getByRole("button",{name:"Add"}).click();
+  await expect(dialog.getByRole("region",{name:"Manual time history"})).toBeVisible();
+  await dialog.getByRole("button",{name:/Delete 15m entry/}).click();
+  await page.getByRole("dialog",{name:"Delete time entry?"}).getByRole("button",{name:"Delete"}).click();
+  await expect(dialog.getByRole("region",{name:"Manual time history"})).toHaveCount(0);
+  await expect(page.getByText("Time entry deleted.")).toBeHidden({timeout:7_000});
+
+  await dialog.getByRole("button",{name:"Review plan"}).click();
+  await dialog.getByRole("button",{name:"Mark complete"}).first().click();
+  await expect(dialog.getByRole("button",{name:"Undo"}).first()).toBeVisible();
+  await dialog.getByRole("button",{name:"Undo"}).first().click();
+  await expect(dialog.getByRole("button",{name:"Mark complete"}).first()).toBeVisible();
+
+  await dialog.getByRole("spinbutton",{name:"Target minutes"}).fill("80");
+  await dialog.getByRole("button",{name:"Save adjustment"}).click();
+  await expect(dialog.getByText("1h 20m",{exact:false}).first()).toBeVisible();
+  await dialog.getByRole("combobox",{name:"Apply change to"}).selectOption("future");
+  await dialog.getByRole("spinbutton",{name:"Target minutes"}).fill("95");
+  await dialog.getByRole("button",{name:"Save adjustment"}).click();
+  await dialog.getByRole("button",{name:"Close"}).click();
+
+  await page.getByRole("button",{name:"Week"}).click();
+  if(mobile){await expect(page.getByTestId("phone-week-selector")).toBeVisible();await page.locator(`[data-date="${today}"]`).click();await expect(page.getByTestId("phone-week-stack")).toContainText("Software")}
+  else await expect(page.getByTestId("desktop-week-grid")).toBeVisible();
+
+  await page.goto("/en/settings");
+  await page.getByRole("textbox",{name:"New checklist step"}).first().fill("Prepare tomorrow");
+  await page.getByRole("button",{name:"Add step"}).first().click();
+  await expect(page.getByRole("textbox",{name:"Checklist step label"}).last()).toHaveValue("Prepare tomorrow");
+  await page.getByRole("button",{name:"Archive"}).first().click();
+  await expect(page.getByRole("button",{name:"Restore"})).toBeVisible();
+  await page.getByRole("button",{name:"Restore"}).click();
+  await expect(page.getByRole("button",{name:"Archive"}).first()).toBeVisible();
+});
+
+test("keeps two signed-in browser accounts isolated",async({browser})=>{
+  const firstContext=await browser.newContext();const secondContext=await browser.newContext();
+  try{
+    const first=await firstContext.newPage();const second=await secondContext.newPage();
+    await login(first,email);await login(second,secondEmail);
+    if(/\/onboarding$/.test(second.url())){
+      const response=await second.request.post("/api/v1/onboarding",{data:{effectiveFrom:localDate("Africa/Cairo"),draft:{language:"en",timezone:"Africa/Cairo",weekStart:6,items:[{clientId:"private-area",kind:"area",name:"Second account",checklist:[],weekdays:[1],target:"30"}]}}});
+      await expect(response).toBeOK();
+    }
+    const secret=`Isolation ${crypto.randomUUID()}`;
+    await expect(await first.request.post("/api/v1/focus-items",{data:{kind:"area",name:secret,position:99,checklist:[]}})).toBeOK();
+    const secondItems=await apiData<Array<{name:string}>>(await second.request.get("/api/v1/focus-items?includeArchived=true"));
+    expect(secondItems.map(item=>item.name)).not.toContain(secret);
+    await second.goto("/en/settings");
+    await expect(second.getByText(secret)).toHaveCount(0);
+  }finally{await firstContext.close();await secondContext.close()}
 });
 
 test("email verification and password recovery links establish usable sessions",async({page})=>{
@@ -116,3 +184,14 @@ async function mailLink(email:string,subject:string){
   }
   throw new Error(`Timed out waiting for ${subject} email to ${email}.`);
 }
+
+async function login(page:import("@playwright/test").Page,address:string){
+  await page.goto("/en/login");
+  await page.getByLabel("Email").fill(address);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button",{name:"Sign in"}).click();
+  await expect(page).toHaveURL(/\/en\/(onboarding|calendar)$/);
+}
+
+async function apiData<T>(response:import("@playwright/test").APIResponse):Promise<T>{await expect(response).toBeOK();return (await response.json() as {data:T}).data}
+function localDate(timeZone:string){const parts=new Intl.DateTimeFormat("en",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const value=Object.fromEntries(parts.map(part=>[part.type,part.value]));return `${value.year}-${value.month}-${value.day}`}

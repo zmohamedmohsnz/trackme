@@ -29,6 +29,8 @@ The preset is a design foundation, not a limitation. Custom layouts and componen
 - Supabase requests must use the signed-in user's cookie or bearer session so RLS applies. Never expose or use a service-role/secret key in application clients.
 - Every user-owned public table must have explicit authenticated grants, indexed ownership columns, and RLS policies that enforce `auth.uid()` for reads and writes.
 - Store daily attribution as ISO local dates and durations as positive whole minutes; use timezone-aware timestamps only for audit events.
+- Apply checklist edits through the effective-dated `maintain_focus_item_checklist` RPC; never rewrite or delete checklist versions that have historical results.
+- Persist onboarding drafts through `/api/v1/onboarding` and finalize only through the transactional `finalize_onboarding` RPC; do not recreate the former multi-request client flow.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

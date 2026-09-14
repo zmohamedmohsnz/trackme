@@ -1,16 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { z } from "zod";
-import type { CompletionAction, DateOverride, FocusItem, IsoDate, TimeEntry, UserSettings, WeeklyPlanVersion } from "@/types/domain";
+import type { CompletionAction, DateOverride, FocusItem, IsoDate, OnboardingState, TimeEntry, UserSettings, WeeklyPlanVersion } from "@/types/domain";
+import { activeFocusItems } from "@/lib/domain/focus-items";
 import { ApiError } from "./http";
-import type { completionActionSchema, focusItemCreateSchema, focusItemPatchSchema, settingsPatchSchema, timeEntryCreateSchema, weeklyPlanSchema } from "./schemas";
+import type { completionActionSchema, focusItemCreateSchema, focusItemPatchSchema, onboardingFinalizeSchema, onboardingSaveSchema, settingsPatchSchema, timeEntryCreateSchema, weeklyPlanSchema } from "./schemas";
 
-export interface ProfileRow { locale: "en" | "ar"; timezone: string; week_starts_on: 0 | 1 | 2 | 3 | 4 | 5 | 6; onboarding_step: number; onboarding_completed_at: string | null }
+export interface ProfileRow { locale: "en" | "ar"; timezone: string; week_starts_on: 0 | 1 | 2 | 3 | 4 | 5 | 6; onboarding_step: number; onboarding_completed_at: string | null; onboarding_draft?: OnboardingState["draft"] }
 export interface ChecklistRow { id: string; focus_item_id: string; label: string; position: number; effective_from: IsoDate; effective_to: IsoDate | null }
 export interface FocusItemRow { id: string; kind: "area" | "subtask"; parent_id: string | null; name: string; position: number; archived_at: string | null; checklist_templates: ChecklistRow[] }
 export interface PlanEntryRow { focus_item_id: string; weekday: 0 | 1 | 2 | 3 | 4 | 5 | 6; target_minutes: number }
 export interface PlanVersionRow { id: string; effective_from: IsoDate; effective_to: IsoDate | null; weekly_plan_entries: PlanEntryRow[] }
 export interface OverrideRow { focus_item_id: string; local_date: IsoDate; action: "add" | "resize" | "skip"; target_minutes: number | null }
-export interface TimeEntryRow { id: string; focus_item_id: string; local_date: IsoDate; minutes: number; source: "manual" | "completion_fill" }
+export interface TimeEntryRow { id: string; focus_item_id: string; local_date: IsoDate; minutes: number; source: "manual" | "completion_fill"; created_at: string }
 export interface CompletionRow { checklist_template_id: string; local_date: IsoDate }
 export interface CompletionActionRow { id: string; focus_item_id: string; local_date: IsoDate; idempotency_key: string; target_minutes: number; progress_minutes_before: number; filled_minutes: number; undone_at: string | null }
 
@@ -45,7 +46,7 @@ export function toDateOverride(row: OverrideRow): DateOverride {
 }
 
 export function toTimeEntry(row: TimeEntryRow): TimeEntry {
-  return {id: row.id, itemId: row.focus_item_id, date: row.local_date, minutes: row.minutes, source: row.source};
+  return {id: row.id, itemId: row.focus_item_id, date: row.local_date, minutes: row.minutes, source: row.source, createdAt: row.created_at};
 }
 
 export function toCompletionAction(row: CompletionActionRow): CompletionAction {
@@ -70,9 +71,35 @@ export async function patchSettings(db: SupabaseClient, userId: string, input: z
 }
 
 export async function listFocusItems(db: SupabaseClient, userId: string, includeArchived = false) {
-  let query = db.from("focus_items").select("*, checklist_templates(*)").eq("user_id", userId).order("position");
-  if (!includeArchived) query = query.is("archived_at", null);
-  const { data, error } = await query; throwDb(error); return ((data ?? []) as FocusItemRow[]).map(toFocusItem);
+  const { data, error } = await db.from("focus_items").select("*, checklist_templates(*)").eq("user_id", userId).order("position");
+  throwDb(error);
+  const items = ((data ?? []) as FocusItemRow[]).map(toFocusItem);
+  if (includeArchived) return items;
+  return activeFocusItems(items);
+}
+
+export async function getOnboardingState(db: SupabaseClient, userId: string): Promise<OnboardingState> {
+  const {data,error}=await db.from("profiles").select("onboarding_step,onboarding_completed_at,onboarding_draft").eq("user_id",userId).single();
+  throwDb(error);
+  const row=data as Pick<ProfileRow,"onboarding_step"|"onboarding_completed_at"|"onboarding_draft">;
+  return {step:Math.min(row.onboarding_step,2),draft:row.onboarding_draft??null,completed:!!row.onboarding_completed_at};
+}
+
+export async function saveOnboardingDraft(db: SupabaseClient, userId: string, input: z.infer<typeof onboardingSaveSchema>): Promise<OnboardingState> {
+  const {data,error}=await db.from("profiles").update({
+    onboarding_step:input.step,
+    onboarding_draft:input.draft,
+  }).eq("user_id",userId).is("onboarding_completed_at",null).select("onboarding_step,onboarding_completed_at,onboarding_draft").single();
+  throwDb(error);
+  const row=data as Pick<ProfileRow,"onboarding_step"|"onboarding_completed_at"|"onboarding_draft">;
+  return {step:Math.min(row.onboarding_step,2),draft:row.onboarding_draft??null,completed:!!row.onboarding_completed_at};
+}
+
+export async function finalizeOnboarding(db: SupabaseClient, userId: string, input: z.infer<typeof onboardingFinalizeSchema>) {
+  const {error}=await db.rpc("finalize_onboarding",{p_draft:input.draft,p_effective_from:input.effectiveFrom});
+  throwDb(error);
+  const [settings,items,plans]=await Promise.all([getSettings(db,userId),listFocusItems(db,userId,true),getWeeklyPlan(db,userId)]);
+  return {settings,items,plans};
 }
 
 export async function createFocusItem(db: SupabaseClient, userId: string, input: z.infer<typeof focusItemCreateSchema>) {
@@ -87,14 +114,15 @@ export async function createFocusItem(db: SupabaseClient, userId: string, input:
 }
 
 export async function patchFocusItem(db: SupabaseClient, userId: string, input: z.infer<typeof focusItemPatchSchema>) {
-  const { id, checklist, archived, ...changes } = input;
-  const row = { ...(changes.name !== undefined ? { name: changes.name } : {}), ...(changes.position !== undefined ? { position: changes.position } : {}), ...(archived !== undefined ? { archived_at: archived ? new Date().toISOString() : null } : {}) };
+  const { id, checklistOperations, archived, parentId, ...changes } = input;
+  const { data: existing, error: existingError } = await db.from("focus_items").select("id").eq("id", id).eq("user_id", userId).maybeSingle();
+  throwDb(existingError);
+  if (!existing) throw new ApiError(404, "not_found", "The focus item was not found.");
+  const row = { ...(changes.name !== undefined ? { name: changes.name } : {}), ...(parentId !== undefined ? { parent_id: parentId } : {}), ...(changes.position !== undefined ? { position: changes.position } : {}), ...(archived !== undefined ? { archived_at: archived ? new Date().toISOString() : null } : {}) };
   if (Object.keys(row).length) { const { error } = await db.from("focus_items").update(row).eq("id", id).eq("user_id", userId); throwDb(error); }
-  if (checklist) {
-    for (const step of checklist) {
-      if (step.id) { const { error } = await db.from("checklist_templates").update({ label: step.label, position: step.position, effective_from: step.effectiveFrom, effective_to: step.effectiveTo ?? null }).eq("id", step.id).eq("focus_item_id", id).eq("user_id", userId); throwDb(error); }
-      else { const { error } = await db.from("checklist_templates").insert({ user_id: userId, focus_item_id: id, label: step.label, position: step.position, effective_from: step.effectiveFrom, effective_to: step.effectiveTo ?? null }); throwDb(error); }
-    }
+  if (checklistOperations) {
+    const { error } = await db.rpc("maintain_focus_item_checklist", { p_item_id: id, p_operations: checklistOperations });
+    throwDb(error);
   }
   return (await listFocusItems(db, userId, true)).find((candidate) => candidate.id === id);
 }
@@ -109,6 +137,16 @@ export async function putWeeklyPlan(db: SupabaseClient, userId: string, input: z
   throwDb(error);
   const { error: deleteError } = await db.from("weekly_plan_entries").delete().eq("weekly_plan_version_id", version.id).eq("user_id", userId); throwDb(deleteError);
   if (input.entries.length) { const { error: insertError } = await db.from("weekly_plan_entries").insert(input.entries.map((entry) => ({ user_id: userId, weekly_plan_version_id: version.id, focus_item_id: entry.itemId, weekday: entry.weekday, target_minutes: entry.durationMinutes }))); throwDb(insertError); }
+  const versions = await getWeeklyPlan(db, userId);
+  const ascending = [...versions].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+  for (const [index, plan] of ascending.entries()) {
+    const next = ascending[index + 1];
+    const effectiveTo = next ? previousDate(next.effectiveFrom) : null;
+    if (plan.effectiveTo !== effectiveTo) {
+      const { error: rangeError } = await db.from("weekly_plan_versions").update({ effective_to: effectiveTo }).eq("id", plan.id).eq("user_id", userId);
+      throwDb(rangeError);
+    }
+  }
   return getWeeklyPlan(db, userId);
 }
 
@@ -119,7 +157,7 @@ export async function putOverride(db: SupabaseClient, userId: string, date: IsoD
 export async function deleteOverride(db: SupabaseClient, userId: string, date: IsoDate, itemId: string) { const { error } = await db.from("date_overrides").delete().eq("user_id", userId).eq("local_date", date).eq("focus_item_id", itemId); throwDb(error); }
 
 export async function createTimeEntry(db: SupabaseClient, userId: string, input: z.infer<typeof timeEntryCreateSchema>) { const { data, error } = await db.from("time_entries").insert({ user_id: userId, focus_item_id: input.itemId, local_date: input.date, minutes: input.minutes, source: "manual" }).select("*").single(); throwDb(error); return toTimeEntry(data as TimeEntryRow); }
-export async function deleteTimeEntry(db: SupabaseClient, userId: string, id: string) { const { error } = await db.from("time_entries").delete().eq("user_id", userId).eq("id", id); throwDb(error); }
+export async function deleteTimeEntry(db: SupabaseClient, userId: string, id: string) { const { error } = await db.from("time_entries").delete().eq("user_id", userId).eq("id", id).eq("source", "manual"); throwDb(error); }
 export async function completeItem(db: SupabaseClient, input: z.infer<typeof completionActionSchema>) { const { data, error } = await db.rpc("complete_item", { p_item_id: input.itemId, p_local_date: input.date, p_idempotency_key: input.idempotencyKey }); throwDb(error); return toCompletionAction(data as CompletionActionRow); }
 export async function undoCompletion(db: SupabaseClient, id: string) { const { data, error } = await db.rpc("undo_completion", { p_action_id: id }); throwDb(error); return data; }
 
@@ -139,6 +177,12 @@ export async function putChecklistCompletion(db: SupabaseClient, userId: string,
 export async function deleteChecklistCompletion(db: SupabaseClient, userId: string, date: IsoDate, stepId: string) {
   const {error} = await db.from("daily_checklist_completions").delete().eq("user_id", userId).eq("checklist_template_id", stepId).eq("local_date", date).eq("source", "manual");
   throwDb(error);
+}
+
+function previousDate(date: IsoDate): IsoDate {
+  const value = new Date(`${date}T12:00:00Z`);
+  value.setUTCDate(value.getUTCDate() - 1);
+  return value.toISOString().slice(0, 10) as IsoDate;
 }
 
 export async function getCalendarRows(db: SupabaseClient, userId: string, from: IsoDate, to: IsoDate) {

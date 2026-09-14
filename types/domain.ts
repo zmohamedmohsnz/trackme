@@ -12,6 +12,11 @@ export interface ChecklistStep {
   effectiveTo?: IsoDate | null;
 }
 
+export type ChecklistOperation =
+  | { operation: "add"; label: string; position: number; effectiveFrom: IsoDate }
+  | { operation: "revise"; id: string; label: string; position: number; effectiveFrom: IsoDate }
+  | { operation: "retire"; id: string; effectiveFrom: IsoDate };
+
 export interface FocusItem {
   id: string;
   kind: FocusItemKind;
@@ -48,7 +53,8 @@ export interface TimeEntry {
   itemId: string;
   date: IsoDate;
   minutes: number;
-  source?: "manual" | "completion_fill";
+  source: "manual" | "completion_fill";
+  createdAt: string;
 }
 
 export interface ChecklistCompletion {
@@ -64,8 +70,11 @@ export interface CalendarItem {
   directMinutes: number;
   contributedMinutes: number;
   actualMinutes: number;
+  remainingMinutes: number;
   percent: number;
   checklist: Array<ChecklistStep & { completed: boolean }>;
+  manualEntries: TimeEntry[];
+  subtasks: CalendarItem[];
   complete: boolean;
   completionActionId?: string;
   completionFilledMinutes?: number;
@@ -82,6 +91,35 @@ export interface UserSettings {
   weekStartsOn: Weekday;
   onboardingStep: number;
   onboardingCompleted: boolean;
+}
+
+export interface OnboardingDraftItem {
+  clientId: string;
+  kind: FocusItemKind;
+  parentClientId?: string;
+  name: string;
+  checklist: string[];
+  weekdays: Weekday[];
+  target: string;
+}
+
+export interface OnboardingDraft {
+  language: "en" | "ar";
+  timezone: string;
+  weekStart: Weekday;
+  items: OnboardingDraftItem[];
+}
+
+export interface OnboardingState {
+  step: number;
+  draft: OnboardingDraft | null;
+  completed: boolean;
+}
+
+export interface OnboardingResult {
+  settings: UserSettings;
+  items: FocusItem[];
+  plans: WeeklyPlanVersion[];
 }
 
 export interface CompletionAction {

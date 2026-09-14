@@ -13,7 +13,7 @@ TrackMe is a bilingual personal planning and progress tracker. It combines recur
 
 ## Local setup
 
-Requirements: Node.js 22.19 or newer, npm, Docker Desktop for the local Supabase stack, and a Supabase project for hosted authentication.
+Requirements: Node.js 22.12 or newer, npm, Docker Desktop for the local Supabase stack, and a Supabase project for hosted authentication.
 
 1. Install pinned dependencies with `npm install`.
 2. Copy `.env.example` to `.env.local` and enter the Supabase project URL and publishable key. Never place a secret or service-role key in a `NEXT_PUBLIC_` variable.

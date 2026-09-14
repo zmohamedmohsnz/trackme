@@ -1,11 +1,12 @@
-import { addDays, format, getDay, isAfter, parseISO, startOfDay } from "date-fns";
+import { addDays, format, getDay, isAfter, isValid, parseISO, startOfDay } from "date-fns";
 import type { IsoDate, Weekday } from "@/types/domain";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function isIsoDate(value: string): value is IsoDate {
   if (!ISO_DATE.test(value)) return false;
-  return format(parseISO(value), "yyyy-MM-dd") === value;
+  const parsed = parseISO(value);
+  return isValid(parsed) && format(parsed, "yyyy-MM-dd") === value;
 }
 
 export function eachIsoDate(from: IsoDate, to: IsoDate): IsoDate[] {
@@ -27,4 +28,15 @@ export function startOfWeekDate(date: IsoDate, weekStartsOn: Weekday): IsoDate {
   const parsed = parseISO(date);
   const delta = (getDay(parsed) - weekStartsOn + 7) % 7;
   return format(addDays(parsed, -delta), "yyyy-MM-dd") as IsoDate;
+}
+
+export function todayInTimeZone(timeZone: string, now = new Date()): IsoDate {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}` as IsoDate;
 }

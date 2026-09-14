@@ -3,10 +3,14 @@ import type {CalendarDay, FocusItem, UserSettings, WeeklyPlanVersion} from "@/ty
 import {demoCalendar, demoFocusItems, demoSettings, demoWeeklyPlan} from "./demo-data";
 
 export const demoMode=!process.env.NEXT_PUBLIC_SUPABASE_URL||!process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+export type ApiFieldErrors=Record<string,string[]|undefined>;
+export class ApiClientError extends Error{
+  constructor(public readonly status:number,public readonly code:string,message:string,public readonly fieldErrors:ApiFieldErrors={}){super(message);this.name="ApiClientError"}
+}
 export async function apiFetch<T>(path:string,init?:RequestInit,fallback?:()=>T):Promise<T>{
   if(demoMode&&fallback)return fallback();
   const response=await fetch(path,{...init,credentials:"include",headers:{"Content-Type":"application/json",...init?.headers}});
-  if(!response.ok){const body=await response.json().catch(()=>null);throw new Error(body?.error?.message||`Request failed (${response.status})`)}
+  if(!response.ok){const body=await response.json().catch(()=>null);const error=body?.error;throw new ApiClientError(response.status,error?.code||"request_failed",error?.message||`Request failed (${response.status})`,error?.fieldErrors||{})}
   if(response.status===204)return undefined as T;
   const body=await response.json() as {data:T};
   return body.data;

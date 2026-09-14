@@ -21,12 +21,18 @@ export function errorResponse(error: unknown) {
   }
   if (error instanceof ZodError) {
     return NextResponse.json(
-      { error: { code: "validation_error", message: "The request is invalid.", fieldErrors: error.flatten().fieldErrors } },
+      { error: { code: "validation_error", message: "The request is invalid.", fieldErrors: collectFieldErrors(error) } },
       { status: 400 },
     );
   }
   console.error(error);
   return NextResponse.json({ error: { code: "internal_error", message: "An unexpected error occurred." } }, { status: 500 });
+}
+
+function collectFieldErrors(error:ZodError):Record<string,string[]>{
+  const result:Record<string,string[]>={};
+  for(const issue of error.issues){const path=issue.path.map(String).join(".")||"_form";(result[path]??=[]).push(issue.message)}
+  return result;
 }
 
 export async function parseJson<T>(request: Request, schema: ZodType<T>): Promise<T> {

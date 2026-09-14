@@ -6,7 +6,7 @@ export function latestPlanForDate(
   date: IsoDate,
 ): WeeklyPlanVersion | undefined {
   return versions
-    .filter((version) => version.effectiveFrom <= date)
+    .filter((version) => version.effectiveFrom <= date && (!version.effectiveTo || version.effectiveTo >= date))
     .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
 }
 
