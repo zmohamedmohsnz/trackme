@@ -14,8 +14,8 @@ describe("FocusItemManager",()=>{
   beforeEach(()=>{vi.clearAllMocks();api.getFocusItems.mockResolvedValue([]);api.apiFetch.mockResolvedValue({})});
   afterEach(cleanup);
   it.each([
-    ["en",en,"Focus areas and subtasks","Focus area name"],
-    ["ar",ar,"مجالات التركيز والمهام الفرعية","اسم مجال التركيز"],
+    ["en",en,"Your areas and tasks","Area name"],
+    ["ar",ar,"مجالاتك ومهامك","اسم المجال"],
   ])("renders localized management controls in %s",async(locale,messages,title,areaLabel)=>{
     render(<div dir={locale==="ar"?"rtl":"ltr"}><NextIntlClientProvider locale={locale} messages={messages}><FocusItemManager timezone="Africa/Cairo"/></NextIntlClientProvider></div>);
     expect(await screen.findByText(title)).toBeInTheDocument();
@@ -25,7 +25,7 @@ describe("FocusItemManager",()=>{
   it("shows localized feedback for an overlong focus-area name",async()=>{
     const user=userEvent.setup();
     render(<NextIntlClientProvider locale="en" messages={en}><FocusItemManager timezone="Africa/Cairo"/></NextIntlClientProvider>);
-    const input=await screen.findByLabelText("Focus area name");
+    const input=await screen.findByLabelText("Area name");
     fireEvent.change(input,{target:{value:"x".repeat(201)}});await user.click(screen.getByRole("button",{name:"Add area"}));
     expect(screen.getByText("Enter a name between 1 and 200 characters.")).toBeInTheDocument();
     expect(input).toHaveAttribute("aria-invalid","true");

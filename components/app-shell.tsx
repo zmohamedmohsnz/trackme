@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import {usePathname,useRouter} from "next/navigation";
-import {CalendarDays,ClipboardList,Settings,LogOut,Sparkles} from "lucide-react";
+import {CalendarDays,ClipboardList,Layers3,Settings,LogOut,Sparkles} from "lucide-react";
 import {useLocale,useTranslations} from "next-intl";
 import {cn} from "@/lib/utils";
 import {Button} from "./ui/button";
@@ -9,7 +9,7 @@ import {demoMode} from "./api-client";
 
 export function AppShell({children}:{children:React.ReactNode}){
  const t=useTranslations("Nav"),locale=useLocale(),path=usePathname(),router=useRouter();
- const links=[{href:`/${locale}/calendar`,label:t("calendar"),icon:CalendarDays},{href:`/${locale}/weekly-plan`,label:t("weeklyPlan"),icon:ClipboardList},{href:`/${locale}/settings`,label:t("settings"),icon:Settings}];
+ const links=[{href:`/${locale}/calendar`,label:t("calendar"),icon:CalendarDays},{href:`/${locale}/weekly-plan`,label:t("weeklyPlan"),icon:ClipboardList},{href:`/${locale}/areas-tasks`,label:t("areasTasks"),icon:Layers3},{href:`/${locale}/settings`,label:t("settings"),icon:Settings}];
  async function logout(){if(!demoMode){const {createClient}=await import("@/lib/supabase/client");await createClient().auth.signOut()}router.push(`/${locale}/login`);router.refresh()}
  return <div className="min-h-[calc(100vh-33px)] bg-muted/30 lg:grid lg:grid-cols-[240px_1fr]">
    <aside className="hidden border-e bg-background p-4 lg:flex lg:flex-col"><Link href={`/${locale}/calendar`} className="mb-8 flex items-center gap-2 px-2 text-lg font-semibold"><span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground"><Sparkles className="size-4"/></span>TrackMe</Link><nav className="space-y-1">{links.map(({href,label,icon:Icon})=><Link key={href} href={href as never} className={cn("flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium",path.startsWith(href)?"bg-accent text-accent-foreground":"text-muted-foreground hover:bg-accent/60 hover:text-foreground")}><Icon className="size-4"/>{label}</Link>)}</nav><Button onClick={logout} variant="ghost" className="mt-auto justify-start text-muted-foreground"><LogOut className="size-4"/>{t("logout")}</Button></aside>
