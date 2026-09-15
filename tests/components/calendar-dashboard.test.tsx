@@ -29,7 +29,8 @@ describe("calendar planning and responsive interactions",()=>{
 
     cleanup();mocks.apiFetch.mockClear();
     render(<NextIntlClientProvider locale="en" messages={en}><DatePlanEditor date="2026-09-14" items={[focusItem]} scheduled={[scheduled]} onSaved={onSaved}/></NextIntlClientProvider>);
-    await user.selectOptions(screen.getByRole("combobox",{name:"Apply change to"}),"future");
+    await user.click(screen.getByRole("combobox",{name:"Apply change to"}));
+    await user.click(screen.getByRole("option",{name:"This weekday from this date forward"}));
     await user.clear(screen.getByRole("spinbutton",{name:"Target minutes"}));await user.type(screen.getByRole("spinbutton",{name:"Target minutes"}),"90");
     await user.click(screen.getByRole("button",{name:"Save adjustment"}));
     await waitFor(()=>expect(mocks.apiFetch).toHaveBeenCalledWith("/api/v1/weekly-plan",expect.objectContaining({method:"PUT"}),expect.any(Function)));

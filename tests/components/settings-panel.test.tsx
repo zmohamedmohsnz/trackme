@@ -18,7 +18,8 @@ describe("SettingsPanel language switching",()=>{
   it("persists the selected language and navigates to its localized route",async()=>{
     const user=userEvent.setup();
     render(<NextIntlClientProvider locale="en" messages={en}><SettingsPanel/></NextIntlClientProvider>);
-    await user.selectOptions(await screen.findByRole("combobox",{name:"Language"}),"ar");
+    await user.click(await screen.findByRole("combobox",{name:"Language"}));
+    await user.click(screen.getByRole("option",{name:"العربية"}));
     await user.click(screen.getByRole("button",{name:"Save settings"}));
     await waitFor(()=>expect(mocks.apiFetch).toHaveBeenCalledWith("/api/v1/me/settings",expect.objectContaining({method:"PATCH",body:JSON.stringify({locale:"ar",timezone:"Africa/Cairo",weekStartsOn:6})}),expect.any(Function)));
     expect(mocks.push).toHaveBeenCalledWith("/ar/settings");

@@ -85,7 +85,8 @@ test("tracks Month and Week, edits schedules and checklists, completes, deletes,
   await dialog.getByRole("spinbutton",{name:"Target minutes"}).fill("80");
   await dialog.getByRole("button",{name:"Save adjustment"}).click();
   await expect(dialog.getByText("1h 20m",{exact:false}).first()).toBeVisible();
-  await dialog.getByRole("combobox",{name:"Apply change to"}).selectOption("future");
+  await dialog.getByRole("combobox",{name:"Apply change to"}).click();
+  await page.getByRole("option",{name:"This weekday from this date forward"}).click();
   await dialog.getByRole("spinbutton",{name:"Target minutes"}).fill("95");
   await dialog.getByRole("button",{name:"Save adjustment"}).click();
   await dialog.getByRole("button",{name:"Close"}).click();
