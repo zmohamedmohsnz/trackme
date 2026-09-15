@@ -72,4 +72,18 @@ describe("OnboardingWizard",()=>{
     expect(screen.getByText("Enter a valid IANA timezone.")).toBeInTheDocument();
     expect(timezone).toHaveAttribute("aria-invalid","true");
   });
+
+  it("updates preferences through keyboard-accessible comboboxes",async()=>{
+    const user=userEvent.setup();
+    apiFetch.mockImplementation((path:string,init?:RequestInit)=>{
+      if(path==="/api/v1/onboarding"&&!init)return Promise.resolve({step:0,completed:false,draft:{language:"en",timezone:"Africa/Cairo",weekStart:6,items:[{clientId:"area",kind:"area",name:"Deep work",checklist:[],weekdays:[1],target:"60"}]}});
+      return Promise.resolve({});
+    });
+    render(<NextIntlClientProvider locale="en" messages={en}><OnboardingWizard/></NextIntlClientProvider>);
+    const language=await screen.findByRole("combobox",{name:"Language"});
+    language.focus();
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+    expect(language).toHaveTextContent("العربية");
+    expect(screen.getByRole("combobox",{name:"Week starts on"})).toHaveTextContent("Saturday");
+  });
 });

@@ -42,4 +42,19 @@ describe("FocusItemManager",()=>{
     expect(api.apiFetch).toHaveBeenNthCalledWith(1,"/api/v1/focus-items",expect.objectContaining({method:"PATCH",body:JSON.stringify({id:item.id,archived:true})}),expect.any(Function));
     expect(api.apiFetch).toHaveBeenNthCalledWith(2,"/api/v1/focus-items",expect.objectContaining({method:"PATCH",body:JSON.stringify({id:item.id,archived:false})}),expect.any(Function));
   });
+  it("creates a subtask under the parent selected from the combobox",async()=>{
+    const user=userEvent.setup();
+    const areas=[
+      {id:"00000000-0000-4000-8000-000000000001",kind:"area" as const,name:"Deep work",position:0,archivedAt:null,checklist:[]},
+      {id:"00000000-0000-4000-8000-000000000002",kind:"area" as const,name:"Health",position:1,archivedAt:null,checklist:[]},
+    ];
+    api.getFocusItems.mockResolvedValue(areas);
+    api.apiFetch.mockImplementation(async(_path:string,init:RequestInit)=>({id:"00000000-0000-4000-8000-000000000003",archivedAt:null,checklist:[],...JSON.parse(String(init.body))}));
+    render(<NextIntlClientProvider locale="en" messages={en}><FocusItemManager timezone="Africa/Cairo"/></NextIntlClientProvider>);
+    await user.click(await screen.findByRole("combobox",{name:"Parent focus area"}));
+    await user.click(screen.getByRole("option",{name:"Health"}));
+    await user.type(screen.getByRole("textbox",{name:"Subtask name"}),"Run");
+    await user.click(screen.getByRole("button",{name:"Add subtask"}));
+    expect(api.apiFetch).toHaveBeenCalledWith("/api/v1/focus-items",expect.objectContaining({method:"POST",body:JSON.stringify({kind:"subtask",parentId:areas[1].id,name:"Run",position:0,checklist:[]})}),expect.any(Function));
+  });
 });
