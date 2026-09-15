@@ -13,6 +13,7 @@ import {Button} from "./ui/button";
 import {Card,CardContent,CardHeader,CardTitle} from "./ui/card";
 import {Input} from "./ui/input";
 import {Label} from "./ui/label";
+import {Select,SelectContent,SelectItem,SelectTrigger,SelectValue} from "./ui/select";
 
 export function SettingsPanel(){
   const t=useTranslations("Settings");

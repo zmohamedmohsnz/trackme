@@ -6,6 +6,7 @@ import {useLocale,useTranslations} from "next-intl";
 import {cn} from "@/lib/utils";
 import {Button} from "./ui/button";
 import {demoMode} from "./api-client";
+import {ThemeToggle} from "./theme-toggle";
 
 export function AppShell({children}:{children:React.ReactNode}){
  const t=useTranslations("Nav"),locale=useLocale(),path=usePathname(),router=useRouter();
