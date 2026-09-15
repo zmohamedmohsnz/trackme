@@ -4,7 +4,7 @@ import {NextIntlClientProvider} from "next-intl";
 import {afterEach,beforeEach,describe,expect,it,vi} from "vitest";
 import en from "../../messages/en.json";
 
-const mocks=vi.hoisted(()=>({apiFetch:vi.fn(),getFocusItems:vi.fn(),getSettings:vi.fn(),push:vi.fn()}));
+const mocks=vi.hoisted(()=>({apiFetch:vi.fn(),getSettings:vi.fn(),push:vi.fn()}));
 vi.mock("../../components/api-client",()=>({...mocks,ApiClientError:class extends Error{},demoMode:false}));
 vi.mock("next/navigation",()=>({useRouter:()=>({push:mocks.push})}));
 vi.mock("sonner",()=>({toast:{success:vi.fn(),error:vi.fn()}}));
@@ -12,7 +12,7 @@ vi.mock("sonner",()=>({toast:{success:vi.fn(),error:vi.fn()}}));
 import {SettingsPanel} from "../../components/settings-panel";
 
 describe("SettingsPanel language switching",()=>{
-  beforeEach(()=>{vi.clearAllMocks();mocks.getSettings.mockResolvedValue({locale:"en",timezone:"Africa/Cairo",weekStartsOn:6,onboardingStep:3,onboardingCompleted:true});mocks.getFocusItems.mockResolvedValue([]);mocks.apiFetch.mockResolvedValue({})});
+  beforeEach(()=>{vi.clearAllMocks();mocks.getSettings.mockResolvedValue({locale:"en",timezone:"Africa/Cairo",weekStartsOn:6,onboardingStep:3,onboardingCompleted:true});mocks.apiFetch.mockResolvedValue({})});
   afterEach(cleanup);
 
   it("persists the selected language and navigates to its localized route",async()=>{
@@ -23,5 +23,12 @@ describe("SettingsPanel language switching",()=>{
     await user.click(screen.getByRole("button",{name:"Save settings"}));
     await waitFor(()=>expect(mocks.apiFetch).toHaveBeenCalledWith("/api/v1/me/settings",expect.objectContaining({method:"PATCH",body:JSON.stringify({locale:"ar",timezone:"Africa/Cairo",weekStartsOn:6})}),expect.any(Function)));
     expect(mocks.push).toHaveBeenCalledWith("/ar/settings");
+  });
+
+  it("shows only preferences without the former description or area manager",async()=>{
+    render(<NextIntlClientProvider locale="en" messages={en}><SettingsPanel/></NextIntlClientProvider>);
+    expect(await screen.findByRole("heading",{name:"Preferences"})).toBeInTheDocument();
+    expect(screen.queryByText("Manage your regional preferences and focus areas.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading",{name:"Manage areas and tasks"})).not.toBeInTheDocument();
   });
 });
