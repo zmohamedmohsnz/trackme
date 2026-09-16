@@ -1,6 +1,6 @@
 {
   "Common":{"demoMode":"Demo mode — connect Supabase to use your real account and data."},
-  "Nav":{"calendar":"Calendar","weeklyPlan":"Weekly Plan","areas":"Areas","settings":"Settings","logout":"Log out"},
+  "Nav":{"calendar":"Calendar","weeklyPlan":"Weekly Plan","areas":"Areas","settings":"Settings","logout":"Log out","theme":"Theme"},
   "Validation":{"required":"This field is required.","email":"Enter a valid email address.","password":"Use at least 8 characters.","date":"Enter a valid date.","duration":"Enter a whole number from 1 to 1,440 minutes.","name":"Enter a name between 1 and 200 characters.","timezone":"Enter a valid IANA timezone."},
   "Auth":{
     "email":"Email","password":"Password","working":"Please wait…","unknownError":"Something went wrong.","invalidCredentials":"The email or password is incorrect.","emailNotConfirmed":"Confirm your email before signing in.","rateLimited":"Too many attempts. Try again in a few minutes.","samePassword":"Choose a password different from your current password.","sessionExpired":"Your session expired. Sign in again.","demoSuccess":"Demo mode: continuing without an account.","forgotLink":"Forgot your password?","newHere":"New to TrackMe?","signupLink":"Create an account","backLogin":"Back to sign in",
