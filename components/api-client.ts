@@ -1,6 +1,6 @@
 "use client";
-import type {CalendarDay, FocusItem, UserSettings, WeeklyPlanVersion} from "@/types/domain";
-import {demoCalendar, demoFocusItems, demoSettings, demoWeeklyPlan} from "./demo-data";
+import type {Area, AreaTimeGoal, CalendarDay, FocusItem, UserSettings, WeeklyPlanVersion} from "@/types/domain";
+import {demoAreas, demoCalendar, demoFocusItems, demoSettings, demoWeeklyPlan} from "./demo-data";
 
 export const demoMode=!process.env.NEXT_PUBLIC_SUPABASE_URL||!process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 export type ApiFieldErrors=Record<string,string[]|undefined>;
@@ -17,5 +17,7 @@ export async function apiFetch<T>(path:string,init?:RequestInit,fallback?:()=>T)
 }
 export async function getCalendar(from:string,to:string){return apiFetch<CalendarDay[]>(`/api/v1/calendar?from=${from}&to=${to}`,undefined,()=>demoCalendar(from,to))}
 export async function getFocusItems(includeArchived=false){return apiFetch<FocusItem[]>(`/api/v1/focus-items${includeArchived?"?includeArchived=true":""}`,undefined,()=>demoFocusItems.filter(item=>includeArchived||!item.archivedAt))}
+export async function getAreas(includeArchived=false){return apiFetch<Area[]>(`/api/v1/areas${includeArchived?"?includeArchived=true":""}`,undefined,()=>demoAreas.filter(area=>includeArchived||!area.archivedAt))}
+export async function getAreaGoals(){return apiFetch<AreaTimeGoal[]>("/api/v1/area-goals",undefined,()=>[])}
 export async function getWeeklyPlan(){return apiFetch<WeeklyPlanVersion[]>("/api/v1/weekly-plan",undefined,()=>demoWeeklyPlan)}
 export async function getSettings(){return apiFetch<UserSettings>("/api/v1/me/settings",undefined,()=>demoSettings)}

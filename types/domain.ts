@@ -1,7 +1,25 @@
 export type IsoDate = `${number}-${number}-${number}`;
 
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
-export type FocusItemKind = "area" | "subtask";
+export type GoalPeriod = "day" | "week" | "month" | "year";
+
+export interface Area {
+  id: string;
+  name: string;
+  position: number;
+  archivedAt?: string | null;
+}
+
+export interface AreaTimeGoal {
+  id: string;
+  areaId: string;
+  period: GoalPeriod;
+  targetMinutes: number;
+  actualMinutes: number;
+  percent: number;
+  periodStart: IsoDate;
+  periodEnd: IsoDate;
+}
 
 export interface ChecklistStep {
   id: string;
@@ -19,8 +37,7 @@ export type ChecklistOperation =
 
 export interface FocusItem {
   id: string;
-  kind: FocusItemKind;
-  parentId?: string | null;
+  areaId?: string | null;
   name: string;
   position: number;
   archivedAt?: string | null;
@@ -95,8 +112,7 @@ export interface UserSettings {
 
 export interface OnboardingDraftItem {
   clientId: string;
-  kind: FocusItemKind;
-  parentClientId?: string;
+  areaClientId?: string | null;
   name: string;
   checklist: string[];
   weekdays: Weekday[];
@@ -107,7 +123,8 @@ export interface OnboardingDraft {
   language: "en" | "ar";
   timezone: string;
   weekStart: Weekday;
-  items: OnboardingDraftItem[];
+  areas: Array<{clientId: string; name: string}>;
+  tasks: OnboardingDraftItem[];
 }
 
 export interface OnboardingState {

@@ -24,9 +24,9 @@ describe("OnboardingWizard",()=>{
     apiFetch.mockReset();
     apiFetch.mockImplementation((path:string,init?:RequestInit)=>{
       if(path==="/api/v1/onboarding"&&!init)return Promise.resolve({step:1,completed:false,draft:{
-        language:"en",timezone:"Africa/Cairo",weekStart:6,items:[
-          {clientId:"area",kind:"area",name:"Deep work",checklist:["Review"],weekdays:[1,3],target:"90"},
-          {clientId:"child",kind:"subtask",parentClientId:"area",name:"Reading",checklist:[],weekdays:[1,3],target:"30"},
+        language:"en",timezone:"Africa/Cairo",weekStart:6,areas:[{clientId:"area",name:"Deep work"}],tasks:[
+          {clientId:"general",areaClientId:"area",name:"General",checklist:["Review"],weekdays:[1,3],target:"90"},
+          {clientId:"child",areaClientId:"area",name:"Reading",checklist:[],weekdays:[1,3],target:"30"},
         ],
       }});
       if(init?.method==="POST")return Promise.resolve({settings:{locale:"en",timezone:"Africa/Cairo",weekStartsOn:6,onboardingStep:3,onboardingCompleted:true},items:[],plans:[]});
@@ -43,7 +43,7 @@ describe("OnboardingWizard",()=>{
     await waitFor(()=>expect(push).toHaveBeenCalledWith("/en/calendar"));
     const finalizations=apiFetch.mock.calls.filter(([path,init])=>path==="/api/v1/onboarding"&&(init as RequestInit | undefined)?.method==="POST");
     expect(finalizations).toHaveLength(1);
-    expect(JSON.parse((finalizations[0][1] as RequestInit).body as string)).toMatchObject({draft:{items:[{name:"Deep work"},{name:"Reading"}]}});
+    expect(JSON.parse((finalizations[0][1] as RequestInit).body as string)).toMatchObject({draft:{areas:[{name:"Deep work"}],tasks:[{name:"General"},{name:"Reading"}]}});
   });
 
   it("shows a field-level duration error before finalization",async()=>{
@@ -51,7 +51,7 @@ describe("OnboardingWizard",()=>{
     render(<NextIntlClientProvider locale="en" messages={en}><OnboardingWizard/></NextIntlClientProvider>);
     expect(await screen.findByDisplayValue("Deep work")).toBeInTheDocument();
     await user.click(screen.getByRole("button",{name:"Continue"}));
-    const duration=await screen.findByRole("spinbutton",{name:"Deep work Daily target (minutes)"});
+    const duration=await screen.findByRole("spinbutton",{name:"General Daily target (minutes)"});
     await user.clear(duration);await user.type(duration,"0");await user.click(screen.getByRole("button",{name:"Finish setup"}));
     expect(screen.getByText("Enter a whole number from 1 to 1,440 minutes.")).toBeInTheDocument();
     expect(duration).toHaveAttribute("aria-invalid","true");
@@ -60,7 +60,7 @@ describe("OnboardingWizard",()=>{
   it("returns to the preference step and shows an invalid timezone inline",async()=>{
     const user=userEvent.setup();
     apiFetch.mockImplementation((path:string,init?:RequestInit)=>{
-      if(path==="/api/v1/onboarding"&&!init)return Promise.resolve({step:0,completed:false,draft:{language:"en",timezone:"Mars/Olympus",weekStart:6,items:[{clientId:"area",kind:"area",name:"Deep work",checklist:[],weekdays:[1],target:"60"}]}});
+      if(path==="/api/v1/onboarding"&&!init)return Promise.resolve({step:0,completed:false,draft:{language:"en",timezone:"Mars/Olympus",weekStart:6,areas:[],tasks:[{clientId:"task",areaClientId:null,name:"Deep work",checklist:[],weekdays:[1],target:"60"}]}});
       return Promise.resolve({});
     });
     render(<NextIntlClientProvider locale="en" messages={en}><OnboardingWizard/></NextIntlClientProvider>);
@@ -76,7 +76,7 @@ describe("OnboardingWizard",()=>{
   it("updates preferences through keyboard-accessible comboboxes",async()=>{
     const user=userEvent.setup();
     apiFetch.mockImplementation((path:string,init?:RequestInit)=>{
-      if(path==="/api/v1/onboarding"&&!init)return Promise.resolve({step:0,completed:false,draft:{language:"en",timezone:"Africa/Cairo",weekStart:6,items:[{clientId:"area",kind:"area",name:"Deep work",checklist:[],weekdays:[1],target:"60"}]}});
+      if(path==="/api/v1/onboarding"&&!init)return Promise.resolve({step:0,completed:false,draft:{language:"en",timezone:"Africa/Cairo",weekStart:6,areas:[{clientId:"area",name:"Deep work"}],tasks:[{clientId:"area",kind:"area",name:"Deep work",checklist:[],weekdays:[1],target:"60"}]}});
       return Promise.resolve({});
     });
     render(<NextIntlClientProvider locale="en" messages={en}><OnboardingWizard/></NextIntlClientProvider>);

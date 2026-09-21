@@ -12,7 +12,7 @@ vi.mock("sonner",()=>({toast:{success:vi.fn(),error:vi.fn()}}));
 
 import {CalendarDashboard,DatePlanEditor} from "../../components/calendar-dashboard";
 
-const focusItem:FocusItem={id:"00000000-0000-4000-8000-000000000001",kind:"area",name:"Deep work",position:0,archivedAt:null,checklist:[]};
+const focusItem:FocusItem={id:"00000000-0000-4000-8000-000000000001",areaId:null,name:"Deep work",position:0,archivedAt:null,checklist:[]};
 const scheduled:CalendarItem={item:focusItem,date:"2026-09-14",targetMinutes:60,directMinutes:0,contributedMinutes:0,actualMinutes:0,remainingMinutes:60,percent:0,complete:false,checklist:[],manualEntries:[],subtasks:[]};
 
 describe("calendar planning and responsive interactions",()=>{

@@ -55,13 +55,9 @@ export function buildCalendar(input: CalendarInput): CalendarDay[] {
   const itemById = new Map(input.items.map((item) => [item.id, item]));
   return eachIsoDate(input.from, input.to).map((date) => {
     const scheduled = resolvePlanEntries(date, input.versions, input.overrides);
-    const scheduledIds = new Set(scheduled.map((entry) => entry.itemId));
     const active = scheduled.filter((entry) => {
       const item = itemById.get(entry.itemId);
-      if (!item || (item.archivedAt && item.archivedAt.slice(0, 10) <= date)) return false;
-      if (item.kind !== "subtask" || !item.parentId || !scheduledIds.has(item.parentId)) return item.kind !== "subtask";
-      const parent = itemById.get(item.parentId);
-      return !!parent && (!parent.archivedAt || parent.archivedAt.slice(0, 10) > date);
+      return !!item && (!item.archivedAt || item.archivedAt.slice(0, 10) > date);
     });
 
     const directMinutes = new Map<string, number>();
@@ -82,12 +78,7 @@ export function buildCalendar(input: CalendarInput): CalendarDay[] {
       const manualEntries = input.timeEntries
         .filter((timeEntry) => timeEntry.date === date && timeEntry.itemId === item.id && timeEntry.source === "manual")
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      let contributedMinutes = 0;
-      if (item.kind === "area") {
-        for (const child of input.items.filter((candidate) => candidate.parentId === item.id)) {
-          contributedMinutes += directMinutes.get(child.id) ?? 0;
-        }
-      }
+      const contributedMinutes = 0;
       const actualMinutes = ownMinutes + contributedMinutes;
       const completionPlan = planCompletion(entry.durationMinutes, actualMinutes, checklist);
       const completionAction = input.completionActions?.find(
@@ -108,20 +99,9 @@ export function buildCalendar(input: CalendarInput): CalendarDay[] {
         ...(completionAction ? { completionFilledMinutes: completionAction.filledMinutes } : {}),
       };
     });
-    const calendarItemById = new Map(calendarItems.map((calendarItem) => [calendarItem.item.id, calendarItem]));
-    for (const calendarItem of calendarItems) {
-      if (calendarItem.item.kind === "subtask" && calendarItem.item.parentId) {
-        calendarItemById.get(calendarItem.item.parentId)?.subtasks.push(calendarItem);
-      }
-    }
-    for (const calendarItem of calendarItems) {
-      calendarItem.subtasks.sort((a, b) => a.item.position - b.item.position);
-    }
     return {
       date,
-      items: calendarItems
-        .filter((calendarItem) => calendarItem.item.kind === "area")
-        .sort((a, b) => a.item.position - b.item.position),
+      items: calendarItems.sort((a, b) => a.item.position - b.item.position),
     };
   });
 }

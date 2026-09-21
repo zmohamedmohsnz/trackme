@@ -1,13 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { z } from "zod";
-import type { CompletionAction, DateOverride, FocusItem, IsoDate, OnboardingState, TimeEntry, UserSettings, WeeklyPlanVersion } from "@/types/domain";
+import type { Area, AreaTimeGoal, CompletionAction, DateOverride, FocusItem, GoalPeriod, IsoDate, OnboardingState, TimeEntry, UserSettings, WeeklyPlanVersion } from "@/types/domain";
 import { activeFocusItems } from "@/lib/domain/focus-items";
+import {areaGoalProgress,goalPeriodBounds} from "@/lib/domain/area-goals";
+import {todayInTimeZone} from "@/lib/domain/dates";
 import { ApiError } from "./http";
-import type { completionActionSchema, focusItemCreateSchema, focusItemPatchSchema, onboardingFinalizeSchema, onboardingSaveSchema, settingsPatchSchema, timeEntryCreateSchema, weeklyPlanSchema } from "./schemas";
+import type { areaCreateSchema, areaGoalUpsertSchema, areaPatchSchema, completionActionSchema, focusItemCreateSchema, focusItemPatchSchema, onboardingFinalizeSchema, onboardingSaveSchema, settingsPatchSchema, timeEntryCreateSchema, weeklyPlanSchema } from "./schemas";
 
 export interface ProfileRow { locale: "en" | "ar"; timezone: string; week_starts_on: 0 | 1 | 2 | 3 | 4 | 5 | 6; onboarding_step: number; onboarding_completed_at: string | null; onboarding_draft?: OnboardingState["draft"] }
 export interface ChecklistRow { id: string; focus_item_id: string; label: string; position: number; effective_from: IsoDate; effective_to: IsoDate | null }
-export interface FocusItemRow { id: string; kind: "area" | "subtask"; parent_id: string | null; name: string; position: number; archived_at: string | null; checklist_templates: ChecklistRow[] }
+export interface FocusItemRow { id: string; area_id: string | null; name: string; position: number; archived_at: string | null; checklist_templates: ChecklistRow[] }
+export interface AreaRow {id:string;name:string;position:number;archived_at:string|null}
+export interface AreaGoalRow {id:string;area_id:string;period:GoalPeriod;target_minutes:number}
 export interface PlanEntryRow { focus_item_id: string; weekday: 0 | 1 | 2 | 3 | 4 | 5 | 6; target_minutes: number }
 export interface PlanVersionRow { id: string; effective_from: IsoDate; effective_to: IsoDate | null; weekly_plan_entries: PlanEntryRow[] }
 export interface OverrideRow { focus_item_id: string; local_date: IsoDate; action: "add" | "resize" | "skip"; target_minutes: number | null }
@@ -26,14 +30,14 @@ export function toSettings(row: ProfileRow): UserSettings {
 export function toFocusItem(row: FocusItemRow): FocusItem {
   return {
     id: row.id,
-    kind: row.kind,
-    parentId: row.parent_id,
+    areaId: row.area_id,
     name: row.name,
     position: row.position,
     archivedAt: row.archived_at,
     checklist: (row.checklist_templates ?? []).map((step) => ({id: step.id, itemId: step.focus_item_id, label: step.label, position: step.position, effectiveFrom: step.effective_from, effectiveTo: step.effective_to})),
   };
 }
+export function toArea(row:AreaRow):Area{return {id:row.id,name:row.name,position:row.position,archivedAt:row.archived_at}}
 
 export function toWeeklyPlan(row: PlanVersionRow): WeeklyPlanVersion {
   return {id: row.id, effectiveFrom: row.effective_from, effectiveTo: row.effective_to, entries: (row.weekly_plan_entries ?? []).map((entry) => ({itemId: entry.focus_item_id, weekday: entry.weekday, durationMinutes: entry.target_minutes}))};
@@ -104,7 +108,7 @@ export async function finalizeOnboarding(db: SupabaseClient, userId: string, inp
 
 export async function createFocusItem(db: SupabaseClient, userId: string, input: z.infer<typeof focusItemCreateSchema>) {
   const { checklist, ...item } = input;
-  const { data, error } = await db.from("focus_items").insert({ user_id: userId, kind: item.kind, parent_id: item.parentId ?? null, name: item.name, position: item.position }).select("*").single();
+  const { data, error } = await db.from("focus_items").insert({ user_id: userId, area_id: item.areaId ?? null, name: item.name, position: item.position }).select("*").single();
   throwDb(error);
   if (checklist.length) {
     const { error: checklistError } = await db.from("checklist_templates").insert(checklist.map((step) => ({ user_id: userId, focus_item_id: data.id, label: step.label, position: step.position, effective_from: step.effectiveFrom, effective_to: step.effectiveTo ?? null })));
@@ -114,11 +118,11 @@ export async function createFocusItem(db: SupabaseClient, userId: string, input:
 }
 
 export async function patchFocusItem(db: SupabaseClient, userId: string, input: z.infer<typeof focusItemPatchSchema>) {
-  const { id, checklistOperations, archived, parentId, ...changes } = input;
+  const { id, checklistOperations, archived, areaId, ...changes } = input;
   const { data: existing, error: existingError } = await db.from("focus_items").select("id").eq("id", id).eq("user_id", userId).maybeSingle();
   throwDb(existingError);
   if (!existing) throw new ApiError(404, "not_found", "The focus item was not found.");
-  const row = { ...(changes.name !== undefined ? { name: changes.name } : {}), ...(parentId !== undefined ? { parent_id: parentId } : {}), ...(changes.position !== undefined ? { position: changes.position } : {}), ...(archived !== undefined ? { archived_at: archived ? new Date().toISOString() : null } : {}) };
+  const row = { ...(changes.name !== undefined ? { name: changes.name } : {}), ...(areaId !== undefined ? { area_id: areaId } : {}), ...(changes.position !== undefined ? { position: changes.position } : {}), ...(archived !== undefined ? { archived_at: archived ? new Date().toISOString() : null } : {}) };
   if (Object.keys(row).length) { const { error } = await db.from("focus_items").update(row).eq("id", id).eq("user_id", userId); throwDb(error); }
   if (checklistOperations) {
     const { error } = await db.rpc("maintain_focus_item_checklist", { p_item_id: id, p_operations: checklistOperations });
@@ -126,6 +130,15 @@ export async function patchFocusItem(db: SupabaseClient, userId: string, input: 
   }
   return (await listFocusItems(db, userId, true)).find((candidate) => candidate.id === id);
 }
+
+export async function listAreas(db:SupabaseClient,userId:string,includeArchived=false){const {data,error}=await db.from("areas").select("*").eq("user_id",userId).order("position");throwDb(error);const areas=((data??[]) as AreaRow[]).map(toArea);return includeArchived?areas:areas.filter(area=>!area.archivedAt)}
+export async function createArea(db:SupabaseClient,userId:string,input:z.infer<typeof areaCreateSchema>){const {data,error}=await db.from("areas").insert({user_id:userId,name:input.name,position:input.position}).select("*").single();throwDb(error);return toArea(data as AreaRow)}
+export async function patchArea(db:SupabaseClient,userId:string,input:z.infer<typeof areaPatchSchema>){const {id,archived,...changes}=input;const row={...changes,...(archived!==undefined?{archived_at:archived?new Date().toISOString():null}:{})};const {data,error}=await db.from("areas").update(row).eq("id",id).eq("user_id",userId).select("*").single();throwDb(error);return toArea(data as AreaRow)}
+export async function deleteArea(db:SupabaseClient,userId:string,id:string){const {error}=await db.from("areas").delete().eq("id",id).eq("user_id",userId);throwDb(error)}
+
+export async function listAreaGoals(db:SupabaseClient,userId:string):Promise<AreaTimeGoal[]>{const settings=await getSettings(db,userId);const today=todayInTimeZone(settings.timezone);const {data,error}=await db.from("area_time_goals").select("*").eq("user_id",userId);throwDb(error);return Promise.all(((data??[]) as AreaGoalRow[]).map(async goal=>{const bounds=goalPeriodBounds(today,goal.period,settings.weekStartsOn);const {data:entries,error:entriesError}=await db.from("time_entries").select("minutes,focus_items!inner(area_id)").eq("user_id",userId).eq("focus_items.area_id",goal.area_id).gte("local_date",bounds.periodStart).lte("local_date",bounds.periodEnd);throwDb(entriesError);const actual=(entries??[]).reduce((sum,row)=>sum+Number(row.minutes),0);return {id:goal.id,areaId:goal.area_id,period:goal.period,targetMinutes:goal.target_minutes,...bounds,...areaGoalProgress(actual,goal.target_minutes)}}))}
+export async function upsertAreaGoal(db:SupabaseClient,userId:string,input:z.infer<typeof areaGoalUpsertSchema>){const {error}=await db.from("area_time_goals").upsert({user_id:userId,area_id:input.areaId,period:input.period,target_minutes:input.targetMinutes},{onConflict:"user_id,area_id,period"});throwDb(error);return (await listAreaGoals(db,userId)).find(goal=>goal.areaId===input.areaId&&goal.period===input.period)}
+export async function deleteAreaGoal(db:SupabaseClient,userId:string,id:string){const {error}=await db.from("area_time_goals").delete().eq("id",id).eq("user_id",userId);throwDb(error)}
 
 export async function getWeeklyPlan(db: SupabaseClient, userId: string) {
   const { data, error } = await db.from("weekly_plan_versions").select("*, weekly_plan_entries(*)").eq("user_id", userId).order("effective_from", { ascending: false });

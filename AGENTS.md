@@ -31,6 +31,8 @@ The preset is a design foundation, not a limitation. Custom layouts and componen
 - Store daily attribution as ISO local dates and durations as positive whole minutes; use timezone-aware timestamps only for audit events.
 - Apply checklist edits through the effective-dated `maintain_focus_item_checklist` RPC; never rewrite or delete checklist versions that have historical results.
 - Persist onboarding drafts through `/api/v1/onboarding` and finalize only through the transactional `finalize_onboarding` RPC; do not recreate the former multi-request client flow.
+- Treat areas as optional organizational categories, never schedulable or completable items. Tasks remain independently schedulable when unassigned or when their area is archived.
+- Attribute area-goal progress from each task's current `area_id` across immutable local-date time entries; task reassignment therefore moves historical attribution without rewriting time.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

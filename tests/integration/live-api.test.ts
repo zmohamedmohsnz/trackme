@@ -10,6 +10,8 @@ import {DELETE as completionDelete} from "@/app/api/v1/completion-actions/[id]/r
 import {PUT as checklistPut,DELETE as checklistDelete} from "@/app/api/v1/checklist-completions/[date]/[stepId]/route";
 import {PUT as overridePut,DELETE as overrideDelete} from "@/app/api/v1/date-overrides/[date]/[itemId]/route";
 import {GET as onboardingGet,PATCH as onboardingPatch,POST as onboardingPost} from "@/app/api/v1/onboarding/route";
+import {GET as areasGet,POST as areasPost,PATCH as areasPatch} from "@/app/api/v1/areas/route";
+import {GET as goalsGet,PUT as goalsPut,DELETE as goalsDelete} from "@/app/api/v1/area-goals/route";
 
 const enabled=process.env.RUN_INTEGRATION_TESTS==="1";
 const suite=enabled?describe:describe.skip;
@@ -43,7 +45,11 @@ suite("live Supabase API",()=>{
       ()=>settingsGet(request("http://local/api/v1/me/settings","invalid-token")),
       ()=>settingsPatch(request("http://local/api/v1/me/settings","invalid-token","PATCH",{locale:"en"})),
       ()=>focusGet(request("http://local/api/v1/focus-items","invalid-token")),
-      ()=>focusPost(request("http://local/api/v1/focus-items","invalid-token","POST",{kind:"area",name:"Private",position:0,checklist:[]})),
+      ()=>focusPost(request("http://local/api/v1/focus-items","invalid-token","POST",{name:"Private",position:0,checklist:[]})),
+      ()=>areasGet(request("http://local/api/v1/areas","invalid-token")),
+      ()=>areasPost(request("http://local/api/v1/areas","invalid-token","POST",{name:"Private"})),
+      ()=>goalsGet(request("http://local/api/v1/area-goals","invalid-token")),
+      ()=>goalsPut(request("http://local/api/v1/area-goals","invalid-token","PUT",{areaId:id,period:"day",targetMinutes:60})),
       ()=>focusPatch(request("http://local/api/v1/focus-items","invalid-token","PATCH",{id,name:"Private"})),
       ()=>planGet(request("http://local/api/v1/weekly-plan","invalid-token")),
       ()=>planPut(request("http://local/api/v1/weekly-plan","invalid-token","PUT",{effectiveFrom:"2026-09-13",entries:[]})),
@@ -68,6 +74,8 @@ suite("live Supabase API",()=>{
       ()=>settingsPatch(rawRequest("http://local/api/v1/me/settings",tokens[0],"PATCH","{")),
       ()=>focusPost(rawRequest("http://local/api/v1/focus-items",tokens[0],"POST","{")),
       ()=>focusPatch(rawRequest("http://local/api/v1/focus-items",tokens[0],"PATCH","{")),
+      ()=>areasPost(rawRequest("http://local/api/v1/areas",tokens[0],"POST","{")),
+      ()=>goalsPut(rawRequest("http://local/api/v1/area-goals",tokens[0],"PUT","{")),
       ()=>planPut(rawRequest("http://local/api/v1/weekly-plan",tokens[0],"PUT","{")),
       ()=>overridePut(rawRequest("http://local",tokens[0],"PUT","{"),{params:Promise.resolve({date:"2026-09-13",itemId:crypto.randomUUID()})}),
       ()=>timePost(rawRequest("http://local/api/v1/time-entries",tokens[0],"POST","{")),
@@ -80,7 +88,7 @@ suite("live Supabase API",()=>{
 
     const invalidCases=[
       settingsPatch(request("http://local/api/v1/me/settings",tokens[0],"PATCH",{timezone:"Mars/Olympus"})),
-      focusPost(request("http://local/api/v1/focus-items",tokens[0],"POST",{kind:"subtask",name:"Orphan",position:0,checklist:[]})),
+      goalsPut(request("http://local/api/v1/area-goals",tokens[0],"PUT",{areaId:crypto.randomUUID(),period:"day",targetMinutes:0})),
       planPut(request("http://local/api/v1/weekly-plan",tokens[0],"PUT",{effectiveFrom:"2026-02-30",entries:[]})),
       timePost(request("http://local/api/v1/time-entries",tokens[0],"POST",{itemId:crypto.randomUUID(),date:"2026-02-30",minutes:0})),
       completionPost(request("http://local/api/v1/completion-actions",tokens[0],"POST",{itemId:crypto.randomUUID(),date:"2026-02-30",idempotencyKey:"short"})),
@@ -103,21 +111,27 @@ suite("live Supabase API",()=>{
     expect(patchResponse.status).toBe(200);
     expect((await data(patchResponse)).weekStartsOn).toBe(6);
 
-    const created=await focusPost(request("http://local/api/v1/focus-items",tokens[0],"POST",{kind:"area",name:"Software",position:0,checklist:[{label:"Review",position:0,effectiveFrom:"2026-09-12"}]}));
+    const area=await data(await areasPost(request("http://local/api/v1/areas",tokens[0],"POST",{name:"Engineering",position:0})));
+    const created=await focusPost(request("http://local/api/v1/focus-items",tokens[0],"POST",{areaId:area.id,name:"Software",position:0,checklist:[{label:"Review",position:0,effectiveFrom:"2026-09-12"}]}));
     expect(created.status).toBe(201);
     const item=await data(created);itemId=item.id;stepId=item.checklist[0].id;
-    const childResponse=await focusPost(request("http://local/api/v1/focus-items",tokens[0],"POST",{kind:"subtask",parentId:itemId,name:"Read",position:0,checklist:[]}));
+    const childResponse=await focusPost(request("http://local/api/v1/focus-items",tokens[0],"POST",{name:"Read",position:1,checklist:[]}));
     expect(childResponse.status).toBe(201);
-    const other=await focusPost(request("http://local/api/v1/focus-items",tokens[1],"POST",{kind:"area",name:"Private",position:0,checklist:[]}));
+    const other=await focusPost(request("http://local/api/v1/focus-items",tokens[1],"POST",{name:"Private",position:0,checklist:[]}));
     expect(other.status).toBe(201);
     otherItemId=(await data(other)).id;
     const isolated=await data(await focusGet(request("http://local/api/v1/focus-items",tokens[0])));
     expect(isolated.map((candidate:{name:string})=>candidate.name)).toEqual(expect.arrayContaining(["Software","Read"]));
+    expect((await data(await goalsPut(request("http://local/api/v1/area-goals",tokens[0],"PUT",{areaId:area.id,period:"day",targetMinutes:60})))).targetMinutes).toBe(60);
+    for(const period of ["week","month","year"])expect((await goalsPut(request("http://local/api/v1/area-goals",tokens[0],"PUT",{areaId:area.id,period,targetMinutes:120}))).status).toBe(200);
+    expect((await data(await goalsGet(request("http://local/api/v1/area-goals",tokens[0])))).length).toBe(4);
 
     const plan=await planPut(request("http://local/api/v1/weekly-plan",tokens[0],"PUT",{effectiveFrom:"2026-09-12",entries:[{itemId,weekday:6,durationMinutes:120}]}));
     expect(plan.status).toBe(200);
     const time=await timePost(request("http://local/api/v1/time-entries",tokens[0],"POST",{itemId,date:"2026-09-12",minutes:30}));
     const timeEntry=await data(time);expect(timeEntry.itemId).toBe(itemId);
+    expect((await data(await goalsGet(request("http://local/api/v1/area-goals",tokens[0])))).find((goal:{period:string})=>goal.period==="year").actualMinutes).toBe(30);
+    expect((await areasPatch(request("http://local/api/v1/areas",tokens[0],"PATCH",{id:area.id,archived:true}))).status).toBe(200);
     const checked=await checklistPut(request("http://local",tokens[0],"PUT"),{params:Promise.resolve({date:"2026-09-12",stepId})});
     expect(checked.status).toBe(200);
 
@@ -126,6 +140,7 @@ suite("live Supabase API",()=>{
     expect(action.filledMinutes).toBe(90);
     let calendar=await data(await getCalendar(request("http://local/api/v1/calendar?from=2026-09-12&to=2026-09-12",tokens[0])));
     expect(calendar[0].items[0]).toMatchObject({actualMinutes:120,complete:true,completionActionId:actionId});
+    expect((await data(await goalsGet(request("http://local/api/v1/area-goals",tokens[0])))).find((goal:{period:string})=>goal.period==="year").actualMinutes).toBe(120);
 
     expect((await completionDelete(request("http://local",tokens[0],"DELETE"),{params:Promise.resolve({id:actionId})})).status).toBe(200);
     calendar=await data(await getCalendar(request("http://local/api/v1/calendar?from=2026-09-12&to=2026-09-12",tokens[0])));
@@ -148,9 +163,16 @@ suite("live Supabase API",()=>{
     calendar=await data(await getCalendar(request("http://local/api/v1/calendar?from=2026-09-12&to=2026-09-12",tokens[0])));
     expect(calendar[0].items[0]).toMatchObject({item:{name:"Engineering"},targetMinutes:120,actualMinutes:30,checklist:[{label:"Review"}]});
     expect((await focusPatch(request("http://local/api/v1/focus-items",tokens[0],"PATCH",{id:itemId,archived:true}))).status).toBe(200);
-    expect((await data(await focusGet(request("http://local/api/v1/focus-items",tokens[0])))).length).toBe(0);
+    expect((await data(await focusGet(request("http://local/api/v1/focus-items",tokens[0])))).length).toBe(1);
     expect((await focusPatch(request("http://local/api/v1/focus-items",tokens[0],"PATCH",{id:itemId,archived:false}))).status).toBe(200);
     expect((await data(await focusGet(request("http://local/api/v1/focus-items",tokens[0])))).length).toBe(2);
+    expect((await focusPatch(request("http://local/api/v1/focus-items",tokens[0],"PATCH",{id:itemId,areaId:null}))).status).toBe(200);
+    expect((await data(await goalsGet(request("http://local/api/v1/area-goals",tokens[0])))).find((goal:{period:string})=>goal.period==="year").actualMinutes).toBe(0);
+    expect((await focusPatch(request("http://local/api/v1/focus-items",tokens[0],"PATCH",{id:itemId,areaId:area.id}))).status).toBe(200);
+    expect((await data(await goalsGet(request("http://local/api/v1/area-goals",tokens[0])))).find((goal:{period:string})=>goal.period==="year").actualMinutes).toBe(30);
+    const goal=(await data(await goalsGet(request("http://local/api/v1/area-goals",tokens[0])))).find((entry:{period:string})=>entry.period==="year");
+    expect((await goalsDelete(request("http://local/api/v1/area-goals",tokens[0],"DELETE",{id:goal.id}))).status).toBe(204);
+    expect((await data(await getCalendar(request("http://local/api/v1/calendar?from=2026-09-12&to=2026-09-12",tokens[0]))))[0].items[0].actualMinutes).toBe(30);
 
     expect((await focusPatch(request("http://local/api/v1/focus-items",tokens[0],"PATCH",{id:otherItemId,name:"Stolen"}))).status).toBe(404);
     expect((await planPut(request("http://local/api/v1/weekly-plan",tokens[0],"PUT",{effectiveFrom:"2026-09-13",entries:[{itemId:otherItemId,weekday:0,durationMinutes:10}]}))).status).toBe(400);
@@ -178,9 +200,8 @@ suite("live Supabase API",()=>{
   });
 
   it("persists an onboarding draft across clients and finalizes it exactly once",async()=>{
-    const draft={language:"ar",timezone:"Africa/Cairo",weekStart:6,items:[
-      {clientId:"area",kind:"area",name:"التعلم",checklist:["راجع الخطة"],weekdays:[1,3],target:"90"},
-      {clientId:"child",kind:"subtask",parentClientId:"area",name:"القراءة",checklist:[],weekdays:[1,3],target:"30"},
+    const draft={language:"ar",timezone:"Africa/Cairo",weekStart:6,areas:[],tasks:[
+      {clientId:"child",name:"القراءة",checklist:[],weekdays:[1,3],target:"30"},
     ]};
     expect((await onboardingPatch(request("http://local/api/v1/onboarding",tokens[2],"PATCH",{step:2,draft}))).status).toBe(200);
     const restored=await data(await onboardingGet(request("http://local/api/v1/onboarding",tokens[2])));
@@ -189,7 +210,7 @@ suite("live Supabase API",()=>{
     const first=await data(await onboardingPost(request("http://local/api/v1/onboarding",tokens[2],"POST",{effectiveFrom:"2026-09-13",draft})));
     const retry=await data(await onboardingPost(request("http://local/api/v1/onboarding",tokens[2],"POST",{effectiveFrom:"2026-09-13",draft})));
     expect(first.settings).toMatchObject({locale:"ar",onboardingStep:3,onboardingCompleted:true});
-    expect(first.items).toHaveLength(2);
+    expect(first.items).toHaveLength(1);
     expect(retry.items.map((item:{id:string})=>item.id).sort()).toEqual(first.items.map((item:{id:string})=>item.id).sort());
     expect(retry.plans).toEqual(first.plans);
     expect((await data(await onboardingGet(request("http://local/api/v1/onboarding",tokens[2])))).draft).toBeNull();
@@ -199,5 +220,5 @@ suite("live Supabase API",()=>{
 function request(url:string,token:string,method="GET",body?:unknown){return new Request(url,{method,headers:{Authorization:`Bearer ${token}`,...(body?{"Content-Type":"application/json"}:{})},...(body?{body:JSON.stringify(body)}:{})})}
 function rawRequest(url:string,token:string,method:string,body:string){return new Request(url,{method,headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body})}
 async function data(response:Response){const body=await response.json();if(!response.ok)throw new Error(JSON.stringify(body));return body.data}
-function emptyDraft(){return {language:"en" as const,timezone:"Africa/Cairo",weekStart:6 as const,items:[]}}
-function namedDraft(){return {language:"en" as const,timezone:"Africa/Cairo",weekStart:6 as const,items:[{clientId:"area",kind:"area" as const,name:"Deep work",checklist:[],weekdays:[1],target:"60"}]}}
+function emptyDraft(){return {language:"en" as const,timezone:"Africa/Cairo",weekStart:6 as const,areas:[],tasks:[]}}
+function namedDraft(){return {language:"en" as const,timezone:"Africa/Cairo",weekStart:6 as const,areas:[],tasks:[{clientId:"task",name:"Deep work",checklist:[],weekdays:[1],target:"60"}]}}

@@ -7,7 +7,7 @@ import {formatDuration,formatEntryTimestamp,TaskCard} from "../../components/tas
 describe("TaskCard",()=>{
   it("shows duration rollup and checklist progress",()=>{
     render(<NextIntlClientProvider locale="en" messages={en}><TaskCard date="2026-09-12" item={{
-      item:{id:"1",kind:"area",name:"Deep work",position:0,checklist:[]},
+      item:{id:"1",areaId:null,name:"Deep work",position:0,checklist:[]},
       date:"2026-09-12",
       targetMinutes:120,
       directMinutes:30,

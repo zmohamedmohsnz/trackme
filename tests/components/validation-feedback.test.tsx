@@ -21,7 +21,7 @@ import {DatePlanEditor} from "@/components/calendar-dashboard";
 import {WeeklyPlan} from "@/components/weekly-plan";
 import type {CalendarItem} from "@/types/domain";
 
-const item:CalendarItem={item:{id:"item-1",kind:"area",name:"Deep work",position:0,checklist:[]},date:"2026-09-13",targetMinutes:60,directMinutes:0,contributedMinutes:0,actualMinutes:0,remainingMinutes:60,percent:0,complete:false,checklist:[],manualEntries:[],subtasks:[]};
+const item:CalendarItem={item:{id:"item-1",areaId:null,name:"Deep work",position:0,checklist:[]},date:"2026-09-13",targetMinutes:60,directMinutes:0,contributedMinutes:0,actualMinutes:0,remainingMinutes:60,percent:0,complete:false,checklist:[],manualEntries:[],subtasks:[]};
 
 describe("localized validation feedback",()=>{
   beforeEach(()=>{
@@ -67,7 +67,7 @@ describe("localized validation feedback",()=>{
 
   it("validates weekly-plan durations beside the affected weekday",async()=>{
     const user=userEvent.setup();
-    mocks.getFocusItems.mockResolvedValue([{id:"item-1",kind:"area",name:"Deep work",position:0,archivedAt:null,checklist:[]}]);
+    mocks.getFocusItems.mockResolvedValue([{id:"item-1",areaId:null,name:"Deep work",position:0,archivedAt:null,checklist:[]}]);
     mocks.getWeeklyPlan.mockResolvedValue([{id:"plan-1",effectiveFrom:"2026-09-01",entries:[{itemId:"item-1",weekday:6,durationMinutes:60}]}]);
     render(<NextIntlClientProvider locale="en" messages={en}><WeeklyPlan/></NextIntlClientProvider>);
     const input=await screen.findByRole("spinbutton",{name:"Sat Target minutes"});
@@ -78,7 +78,7 @@ describe("localized validation feedback",()=>{
 
   it("shows an inline error for a missing effective date",async()=>{
     const user=userEvent.setup();
-    mocks.getFocusItems.mockResolvedValue([{id:"item-1",kind:"area",name:"Deep work",position:0,archivedAt:null,checklist:[]}]);
+    mocks.getFocusItems.mockResolvedValue([{id:"item-1",areaId:null,name:"Deep work",position:0,archivedAt:null,checklist:[]}]);
     render(<NextIntlClientProvider locale="en" messages={en}><WeeklyPlan/></NextIntlClientProvider>);
     const input=await screen.findByLabelText("Effective from");
     await user.clear(input);await user.click(screen.getByRole("button",{name:"Save plan"}));
