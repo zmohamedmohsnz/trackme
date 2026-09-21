@@ -21,8 +21,7 @@ const timezoneSchema = z.string().refine((value) => {
 const weekdaySchema = z.number().int().min(0).max(6);
 const onboardingDraftItemSchema = z.object({
   clientId: z.string().min(1).max(100),
-  kind: z.enum(["area", "subtask"]),
-  parentClientId: z.string().min(1).max(100).optional(),
+  areaClientId: z.string().min(1).max(100).nullable().optional(),
   name: z.string().max(200),
   checklist: z.array(z.string().max(200)).max(50),
   weekdays: z.array(weekdaySchema).max(7).refine((days) => new Set(days).size === days.length, "Weekdays must be unique."),
@@ -33,30 +32,32 @@ export const onboardingDraftSchema = z.object({
   language: z.enum(["en", "ar"]),
   timezone: z.string().max(100),
   weekStart: weekdaySchema,
-  items: z.array(onboardingDraftItemSchema).max(100),
+  areas: z.array(z.object({clientId:z.string().min(1).max(100),name:z.string().max(200)})).max(100),
+  tasks: z.array(onboardingDraftItemSchema).max(100),
 }).superRefine((draft, context) => {
   const ids = new Set<string>();
-  const areas = new Set(draft.items.filter((item) => item.kind === "area").map((item) => item.clientId));
-  draft.items.forEach((item, index) => {
-    if (ids.has(item.clientId)) context.addIssue({code:"custom",path:["items",index,"clientId"],message:"Client ids must be unique."});
+  const areas = new Set(draft.areas.map((area) => area.clientId));
+  for(const [index,area] of draft.areas.entries()){if(ids.has(area.clientId))context.addIssue({code:"custom",path:["areas",index,"clientId"],message:"Client ids must be unique."});ids.add(area.clientId)}
+  draft.tasks.forEach((item, index) => {
+    if (ids.has(item.clientId)) context.addIssue({code:"custom",path:["tasks",index,"clientId"],message:"Client ids must be unique."});
     ids.add(item.clientId);
-    if (item.kind === "area" && item.parentClientId) context.addIssue({code:"custom",path:["items",index,"parentClientId"],message:"An area cannot have a parent."});
-    if (item.kind === "subtask" && (!item.parentClientId || !areas.has(item.parentClientId))) context.addIssue({code:"custom",path:["items",index,"parentClientId"],message:"A subtask requires a parent area in the draft."});
+    if (item.areaClientId && !areas.has(item.areaClientId)) context.addIssue({code:"custom",path:["tasks",index,"areaClientId"],message:"The selected area does not exist in the draft."});
   });
 });
 
 export const onboardingSaveSchema = z.object({step:z.number().int().min(0).max(2),draft:onboardingDraftSchema});
 export const onboardingFinalizeSchema = z.object({effectiveFrom:isoDateSchema,draft:onboardingDraftSchema}).superRefine((value, context) => {
   if(!timezoneSchema.safeParse(value.draft.timezone).success)context.addIssue({code:"custom",path:["draft","timezone"],message:"Must be a valid IANA timezone."});
-  const namedAreas = new Set(value.draft.items.filter((item) => item.kind === "area" && item.name.trim()).map((item) => item.clientId));
-  if (!namedAreas.size) context.addIssue({code:"custom",path:["draft","items"],message:"At least one named focus area is required."});
-  value.draft.items.forEach((item,index) => {
+  const namedAreas = new Set(value.draft.areas.filter((item) => item.name.trim()).map((item) => item.clientId));
+  if (!value.draft.tasks.some(item=>item.name.trim())) context.addIssue({code:"custom",path:["draft","tasks"],message:"At least one named task is required."});
+  value.draft.areas.forEach((area,index)=>{if(area.name.trim()&&!preservedNameSchema.safeParse(area.name).success)context.addIssue({code:"custom",path:["draft","areas",index,"name"],message:"Must contain between 1 and 200 non-whitespace characters."})});
+  value.draft.tasks.forEach((item,index) => {
     if (!item.name.trim()) return;
-    if (item.kind === "subtask" && (!item.parentClientId || !namedAreas.has(item.parentClientId))) context.addIssue({code:"custom",path:["draft","items",index,"parentClientId"],message:"A named subtask requires a named parent area."});
-    if (!preservedNameSchema.safeParse(item.name).success) context.addIssue({code:"custom",path:["draft","items",index,"name"],message:"Must contain between 1 and 200 non-whitespace characters."});
+    if (item.areaClientId && !namedAreas.has(item.areaClientId)) context.addIssue({code:"custom",path:["draft","tasks",index,"areaClientId"],message:"A named task requires a named area or no area."});
+    if (!preservedNameSchema.safeParse(item.name).success) context.addIssue({code:"custom",path:["draft","tasks",index,"name"],message:"Must contain between 1 and 200 non-whitespace characters."});
     const minutes=Number(item.target);
-    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) context.addIssue({code:"custom",path:["draft","items",index,"target"],message:"Must be a whole number from 1 to 1440."});
-    item.checklist.forEach((label,stepIndex)=>{if(label.trim()&&!preservedNameSchema.safeParse(label).success)context.addIssue({code:"custom",path:["draft","items",index,"checklist",stepIndex],message:"Must contain between 1 and 200 non-whitespace characters."})});
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) context.addIssue({code:"custom",path:["draft","tasks",index,"target"],message:"Must be a whole number from 1 to 1440."});
+    item.checklist.forEach((label,stepIndex)=>{if(label.trim()&&!preservedNameSchema.safeParse(label).success)context.addIssue({code:"custom",path:["draft","tasks",index,"checklist",stepIndex],message:"Must contain between 1 and 200 non-whitespace characters."})});
   });
 });
 
@@ -101,24 +102,26 @@ const checklistOperationSchema = z.discriminatedUnion("operation", [
 ]);
 
 export const focusItemCreateSchema = z.object({
-  kind: z.enum(["area", "subtask"]),
-  parentId: uuidSchema.nullable().optional(),
+  areaId: uuidSchema.nullable().optional(),
   name: preservedNameSchema,
   position: z.number().int().min(0).default(0),
   checklist: z.array(checklistInput).default([]),
-}).superRefine((value, context) => {
-  if (value.kind === "subtask" && !value.parentId) context.addIssue({ code: "custom", path: ["parentId"], message: "A subtask requires a parent area." });
-  if (value.kind === "area" && value.parentId) context.addIssue({ code: "custom", path: ["parentId"], message: "An area cannot have a parent." });
 });
 
 export const focusItemPatchSchema = z.object({
   id: uuidSchema,
   name: preservedNameSchema.optional(),
-  parentId: uuidSchema.optional(),
+  areaId: uuidSchema.nullable().optional(),
   position: z.number().int().min(0).optional(),
   archived: z.boolean().optional(),
   checklistOperations: z.array(checklistOperationSchema).min(1).optional(),
 }).refine((value) => Object.keys(value).some((key) => key !== "id"), "At least one change is required.");
+
+export const areaCreateSchema=z.object({name:preservedNameSchema,position:z.number().int().min(0).default(0)});
+export const areaPatchSchema=z.object({id:uuidSchema,name:preservedNameSchema.optional(),position:z.number().int().min(0).optional(),archived:z.boolean().optional()}).refine(value=>Object.keys(value).some(key=>key!=="id"),"At least one change is required.");
+export const areaDeleteSchema=z.object({id:uuidSchema});
+export const areaGoalUpsertSchema=z.object({areaId:uuidSchema,period:z.enum(["day","week","month","year"]),targetMinutes:z.number().int().positive()});
+export const areaGoalDeleteSchema=z.object({id:uuidSchema});
 
 export const weeklyPlanSchema = z.object({
   effectiveFrom: isoDateSchema,

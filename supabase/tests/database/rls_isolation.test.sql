@@ -13,9 +13,15 @@ insert into auth.users (
   ('00000000-0000-0000-0000-000000000000', '32000000-0000-0000-0000-000000000003', 'authenticated', 'authenticated', 'rls-three@example.test', '', now(), '{}', '{}', now(), now(), '', '', '', '');
 delete from public.profiles where user_id = '32000000-0000-0000-0000-000000000003';
 
-insert into public.focus_items (id, user_id, kind, name) values
-  ('32000000-0000-0000-0000-000000000011', '32000000-0000-0000-0000-000000000001', 'area', 'RLS one'),
-  ('32000000-0000-0000-0000-000000000012', '32000000-0000-0000-0000-000000000002', 'area', 'RLS two');
+insert into public.areas (id, user_id, name) values
+  ('32000000-0000-0000-0000-000000000091', '32000000-0000-0000-0000-000000000001', 'RLS area one'),
+  ('32000000-0000-0000-0000-000000000092', '32000000-0000-0000-0000-000000000002', 'RLS area two');
+insert into public.focus_items (id, user_id, area_id, name) values
+  ('32000000-0000-0000-0000-000000000011', '32000000-0000-0000-0000-000000000001', '32000000-0000-0000-0000-000000000091', 'RLS one'),
+  ('32000000-0000-0000-0000-000000000012', '32000000-0000-0000-0000-000000000002', '32000000-0000-0000-0000-000000000092', 'RLS two');
+insert into public.area_time_goals (id, user_id, area_id, period, target_minutes) values
+  ('32000000-0000-0000-0000-0000000000a1', '32000000-0000-0000-0000-000000000001', '32000000-0000-0000-0000-000000000091', 'week', 120),
+  ('32000000-0000-0000-0000-0000000000a2', '32000000-0000-0000-0000-000000000002', '32000000-0000-0000-0000-000000000092', 'week', 120);
 insert into public.checklist_templates (id, user_id, focus_item_id, label, effective_from) values
   ('32000000-0000-0000-0000-000000000021', '32000000-0000-0000-0000-000000000001', '32000000-0000-0000-0000-000000000011', 'RLS one step', date '2026-09-01'),
   ('32000000-0000-0000-0000-000000000022', '32000000-0000-0000-0000-000000000002', '32000000-0000-0000-0000-000000000012', 'RLS two step', date '2026-09-01');
@@ -39,13 +45,13 @@ insert into public.daily_checklist_completions (id, user_id, checklist_template_
   ('32000000-0000-0000-0000-000000000082', '32000000-0000-0000-0000-000000000002', '32000000-0000-0000-0000-000000000022', date '2026-09-13');
 
 select is(
-  (select count(*)::integer from pg_policies where schemaname = 'public' and tablename in ('profiles','focus_items','checklist_templates','weekly_plan_versions','weekly_plan_entries','date_overrides','completion_actions','time_entries','daily_checklist_completions')),
-  36,
+  (select count(*)::integer from pg_policies where schemaname = 'public' and tablename in ('profiles','areas','focus_items','area_time_goals','checklist_templates','weekly_plan_versions','weekly_plan_entries','date_overrides','completion_actions','time_entries','daily_checklist_completions')),
+  44,
   'every exposed table has four operation-specific RLS policies'
 );
 select is(
-  (select count(*)::integer from pg_policies where schemaname = 'public' and cmd = 'UPDATE' and with_check is not null and tablename in ('profiles','focus_items','checklist_templates','weekly_plan_versions','weekly_plan_entries','date_overrides','completion_actions','time_entries','daily_checklist_completions')),
-  9,
+  (select count(*)::integer from pg_policies where schemaname = 'public' and cmd = 'UPDATE' and with_check is not null and tablename in ('profiles','areas','focus_items','area_time_goals','checklist_templates','weekly_plan_versions','weekly_plan_entries','date_overrides','completion_actions','time_entries','daily_checklist_completions')),
+  11,
   'every update policy has an ownership WITH CHECK expression'
 );
 
@@ -53,7 +59,9 @@ select set_config('request.jwt.claim.sub', '32000000-0000-0000-0000-000000000001
 set local role authenticated;
 
 select is((select count(*)::integer from public.profiles), 1, 'profiles SELECT exposes only owned rows');
+select is((select count(*)::integer from public.areas), 1, 'areas SELECT exposes only owned rows');
 select is((select count(*)::integer from public.focus_items), 1, 'focus_items SELECT exposes only owned rows');
+select is((select count(*)::integer from public.area_time_goals), 1, 'area goals SELECT exposes only owned rows');
 select is((select count(*)::integer from public.checklist_templates), 1, 'checklist_templates SELECT exposes only owned rows');
 select is((select count(*)::integer from public.weekly_plan_versions), 1, 'weekly_plan_versions SELECT exposes only owned rows');
 select is((select count(*)::integer from public.weekly_plan_entries), 1, 'weekly_plan_entries SELECT exposes only owned rows');
@@ -63,7 +71,9 @@ select is((select count(*)::integer from public.time_entries), 1, 'time_entries 
 select is((select count(*)::integer from public.daily_checklist_completions), 1, 'daily_checklist_completions SELECT exposes only owned rows');
 
 select throws_like($$insert into public.profiles (user_id) values ('32000000-0000-0000-0000-000000000003')$$, '%row-level security%', 'profiles INSERT rejects another owner');
-select throws_like($$insert into public.focus_items (user_id, kind, name) values ('32000000-0000-0000-0000-000000000002','area','Forbidden')$$, '%row-level security%', 'focus_items INSERT rejects another owner');
+select throws_like($$insert into public.areas (user_id, name) values ('32000000-0000-0000-0000-000000000002','Forbidden')$$, '%row-level security%', 'areas INSERT rejects another owner');
+select throws_like($$insert into public.focus_items (user_id, name) values ('32000000-0000-0000-0000-000000000002','Forbidden')$$, '%row-level security%', 'focus_items INSERT rejects another owner');
+select throws_like($$insert into public.area_time_goals (user_id, area_id, period, target_minutes) values ('32000000-0000-0000-0000-000000000002','32000000-0000-0000-0000-000000000092','day',10)$$, '%row-level security%', 'area goals INSERT rejects another owner');
 select throws_like($$insert into public.checklist_templates (user_id, focus_item_id, label, effective_from) values ('32000000-0000-0000-0000-000000000002','32000000-0000-0000-0000-000000000022','Forbidden',date '2026-09-01')$$, '%row-level security%', 'checklist_templates INSERT rejects another owner');
 select throws_like($$insert into public.weekly_plan_versions (user_id, effective_from) values ('32000000-0000-0000-0000-000000000002',date '2026-10-01')$$, '%row-level security%', 'weekly_plan_versions INSERT rejects another owner');
 select throws_like($$insert into public.weekly_plan_entries (user_id, weekly_plan_version_id, focus_item_id, weekday, target_minutes) values ('32000000-0000-0000-0000-000000000002','32000000-0000-0000-0000-000000000032','32000000-0000-0000-0000-000000000012',1,60)$$, '%row-level security%', 'weekly_plan_entries INSERT rejects another owner');
@@ -73,7 +83,9 @@ select throws_like($$insert into public.time_entries (user_id, focus_item_id, lo
 select throws_like($$insert into public.daily_checklist_completions (user_id, checklist_template_id, local_date) values ('32000000-0000-0000-0000-000000000002','32000000-0000-0000-0000-000000000022',date '2026-09-15')$$, '%row-level security%', 'daily_checklist_completions INSERT rejects another owner');
 
 select results_eq($$update public.profiles set locale = 'ar' where user_id = '32000000-0000-0000-0000-000000000002' returning 1$$, $$select 1 where false$$, 'profiles UPDATE cannot target another user');
+select results_eq($$update public.areas set name = 'Hacked' where id = '32000000-0000-0000-0000-000000000092' returning 1$$, $$select 1 where false$$, 'areas UPDATE cannot target another user');
 select results_eq($$update public.focus_items set name = 'Hacked' where id = '32000000-0000-0000-0000-000000000012' returning 1$$, $$select 1 where false$$, 'focus_items UPDATE cannot target another user');
+select results_eq($$update public.area_time_goals set target_minutes = 999 where id = '32000000-0000-0000-0000-0000000000a2' returning 1$$, $$select 1 where false$$, 'area goals UPDATE cannot target another user');
 select results_eq($$update public.checklist_templates set label = 'Hacked' where id = '32000000-0000-0000-0000-000000000022' returning 1$$, $$select 1 where false$$, 'checklist_templates UPDATE cannot target another user');
 select results_eq($$update public.weekly_plan_versions set effective_to = date '2026-09-30' where id = '32000000-0000-0000-0000-000000000032' returning 1$$, $$select 1 where false$$, 'weekly_plan_versions UPDATE cannot target another user');
 select results_eq($$update public.weekly_plan_entries set target_minutes = 30 where id = '32000000-0000-0000-0000-000000000042' returning 1$$, $$select 1 where false$$, 'weekly_plan_entries UPDATE cannot target another user');
@@ -83,7 +95,9 @@ select results_eq($$update public.time_entries set minutes = 20 where id = '3200
 select results_eq($$update public.daily_checklist_completions set local_date = date '2026-09-14' where id = '32000000-0000-0000-0000-000000000082' returning 1$$, $$select 1 where false$$, 'daily_checklist_completions UPDATE cannot target another user');
 
 select throws_like($$update public.profiles set user_id = '32000000-0000-0000-0000-000000000002' where user_id = '32000000-0000-0000-0000-000000000001'$$, '%row-level security%', 'profiles deny ownership reassignment');
-select throws_like($$update public.focus_items set user_id = '32000000-0000-0000-0000-000000000002' where id = '32000000-0000-0000-0000-000000000011'$$, '%ownership are immutable%', 'focus_items deny ownership reassignment');
+select throws_like($$update public.areas set user_id = '32000000-0000-0000-0000-000000000002' where id = '32000000-0000-0000-0000-000000000091'$$, '%row-level security%', 'areas deny ownership reassignment');
+select throws_like($$update public.focus_items set user_id = '32000000-0000-0000-0000-000000000002' where id = '32000000-0000-0000-0000-000000000011'$$, '%row-level security%', 'focus_items deny ownership reassignment');
+select throws_like($$update public.area_time_goals set user_id = '32000000-0000-0000-0000-000000000002' where id = '32000000-0000-0000-0000-0000000000a1'$$, '%row-level security%', 'area goals deny ownership reassignment');
 select throws_like($$update public.checklist_templates set user_id = '32000000-0000-0000-0000-000000000002' where id = '32000000-0000-0000-0000-000000000021'$$, '%row-level security%', 'checklist_templates deny ownership reassignment');
 select throws_like($$update public.weekly_plan_versions set user_id = '32000000-0000-0000-0000-000000000002' where id = '32000000-0000-0000-0000-000000000031'$$, '%row-level security%', 'weekly_plan_versions deny ownership reassignment');
 select throws_like($$update public.weekly_plan_entries set user_id = '32000000-0000-0000-0000-000000000002' where id = '32000000-0000-0000-0000-000000000041'$$, '%row-level security%', 'weekly_plan_entries deny ownership reassignment');
@@ -93,7 +107,9 @@ select throws_like($$update public.time_entries set user_id = '32000000-0000-000
 select throws_like($$update public.daily_checklist_completions set user_id = '32000000-0000-0000-0000-000000000002' where id = '32000000-0000-0000-0000-000000000081'$$, '%row-level security%', 'daily_checklist_completions deny ownership reassignment');
 
 select results_eq($$delete from public.profiles where user_id = '32000000-0000-0000-0000-000000000002' returning 1$$, $$select 1 where false$$, 'profiles DELETE cannot target another user');
+select results_eq($$delete from public.areas where id = '32000000-0000-0000-0000-000000000092' returning 1$$, $$select 1 where false$$, 'areas DELETE cannot target another user');
 select results_eq($$delete from public.focus_items where id = '32000000-0000-0000-0000-000000000012' returning 1$$, $$select 1 where false$$, 'focus_items DELETE cannot target another user');
+select results_eq($$delete from public.area_time_goals where id = '32000000-0000-0000-0000-0000000000a2' returning 1$$, $$select 1 where false$$, 'area goals DELETE cannot target another user');
 select results_eq($$delete from public.checklist_templates where id = '32000000-0000-0000-0000-000000000022' returning 1$$, $$select 1 where false$$, 'checklist_templates DELETE cannot target another user');
 select results_eq($$delete from public.weekly_plan_versions where id = '32000000-0000-0000-0000-000000000032' returning 1$$, $$select 1 where false$$, 'weekly_plan_versions DELETE cannot target another user');
 select results_eq($$delete from public.weekly_plan_entries where id = '32000000-0000-0000-0000-000000000042' returning 1$$, $$select 1 where false$$, 'weekly_plan_entries DELETE cannot target another user');

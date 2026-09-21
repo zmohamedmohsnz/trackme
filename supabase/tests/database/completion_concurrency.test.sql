@@ -31,8 +31,8 @@ select dblink_exec('race_one', $$
     '00000000-0000-0000-0000-000000000000', '34000000-0000-0000-0000-000000000001',
     'authenticated', 'authenticated', 'race@example.test', '', now(), '{}', '{}', now(), now(), '', '', '', ''
   );
-  insert into public.focus_items (id, user_id, kind, name)
-  values ('34000000-0000-0000-0000-000000000011', '34000000-0000-0000-0000-000000000001', 'area', 'Race area');
+  insert into public.focus_items (id, user_id, name)
+  values ('34000000-0000-0000-0000-000000000011', '34000000-0000-0000-0000-000000000001', 'Race task');
   insert into public.checklist_templates (id, user_id, focus_item_id, label, effective_from)
   values ('34000000-0000-0000-0000-000000000021', '34000000-0000-0000-0000-000000000001', '34000000-0000-0000-0000-000000000011', 'Race step', date '2026-09-01');
   insert into public.weekly_plan_versions (id, user_id, effective_from)

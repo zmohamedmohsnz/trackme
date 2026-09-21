@@ -4,7 +4,7 @@ import {toCompletionAction,toDateOverride,toFocusItem,toSettings,toTimeEntry,toW
 describe("API serializers",()=>{
   it("converts database rows into the shared camelCase contract",()=>{
     expect(toSettings({locale:"en",timezone:"Africa/Cairo",week_starts_on:6,onboarding_step:2,onboarding_completed_at:null})).toEqual({locale:"en",timezone:"Africa/Cairo",weekStartsOn:6,onboardingStep:2,onboardingCompleted:false});
-    expect(toFocusItem({id:"item",kind:"area",parent_id:null,name:"Software",position:0,archived_at:null,checklist_templates:[{id:"step",focus_item_id:"item",label:"Review",position:0,effective_from:"2026-09-12",effective_to:null}]})).toMatchObject({id:"item",name:"Software",checklist:[{itemId:"item",effectiveFrom:"2026-09-12"}]});
+    expect(toFocusItem({id:"item",area_id:null,name:"Software",position:0,archived_at:null,checklist_templates:[{id:"step",focus_item_id:"item",label:"Review",position:0,effective_from:"2026-09-12",effective_to:null}]})).toMatchObject({id:"item",areaId:null,name:"Software",checklist:[{itemId:"item",effectiveFrom:"2026-09-12"}]});
     expect(toWeeklyPlan({id:"plan",effective_from:"2026-09-12",effective_to:null,weekly_plan_entries:[{focus_item_id:"item",weekday:6,target_minutes:240}]})).toMatchObject({effectiveFrom:"2026-09-12",entries:[{itemId:"item",durationMinutes:240}]});
     expect(toDateOverride({focus_item_id:"item",local_date:"2026-09-13",action:"skip",target_minutes:null})).toEqual({itemId:"item",date:"2026-09-13",operation:"skip"});
     expect(toTimeEntry({id:"time",focus_item_id:"item",local_date:"2026-09-13",minutes:30,source:"manual",created_at:"2026-09-13T10:00:00Z"})).toEqual({id:"time",itemId:"item",date:"2026-09-13",minutes:30,source:"manual",createdAt:"2026-09-13T10:00:00Z"});
