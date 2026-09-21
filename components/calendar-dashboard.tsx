@@ -127,13 +127,5 @@ function WeekView({dates,byDate,locale,timeZone,update,updateDay,onSelect,empty}
 function DayStack({date,day,locale,timeZone,update,updateDay,onSelect,empty}:{date:string;day?:CalendarDay;locale:typeof enUS;timeZone?:string;update:(date:string,item:CalendarItem)=>void;updateDay:(day:CalendarDay)=>void;onSelect:(date:string)=>void;empty:string}) {const value=new Date(`${date}T12:00:00`);return <section className="min-w-0"><button className="mb-2 text-start" onClick={()=>onSelect(date)}><p className="text-xs uppercase tracking-wide text-muted-foreground">{format(value,"EEEE",{locale})}</p><h2 className="font-semibold">{format(value,"MMM d",{locale})}</h2></button><div className="space-y-3">{day?.items.length?day.items.map(item=><TaskCard key={item.item.id} item={item} date={date} timeZone={timeZone} onChange={next=>update(date,next)} onDayChange={updateDay}/>):<Empty label={empty}/>}</div></section>}
 function Empty({label}:{label:string}){return <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">{label}</div>}
 function eachDay(start:Date,end:Date){const result:Date[]=[];let date=start;while(date<=end){result.push(date);date=addDays(date,1)}return result}
-function flattenCalendarItems(items:CalendarItem[]):CalendarItem[]{return items.flatMap(item=>[item,...flattenCalendarItems(item.subtasks)])}
-function replaceCalendarItem(items:CalendarItem[],next:CalendarItem):CalendarItem[]{return items.map(item=>{
-  if(item.item.id===next.item.id)return next;
-  const previousChild=item.subtasks.find(child=>child.item.id===next.item.id);
-  const subtasks=replaceCalendarItem(item.subtasks,next);
-  if(!previousChild)return {...item,subtasks};
-  const contributedMinutes=item.contributedMinutes+next.directMinutes-previousChild.directMinutes;
-  const actualMinutes=item.directMinutes+contributedMinutes;
-  return {...item,subtasks,contributedMinutes,actualMinutes,remainingMinutes:Math.max(0,item.targetMinutes-actualMinutes),percent:Math.min(100,(actualMinutes/item.targetMinutes)*100),complete:actualMinutes>=item.targetMinutes&&item.checklist.every(step=>step.completed)};
-})}
+function flattenCalendarItems(items:CalendarItem[]):CalendarItem[]{return items}
+function replaceCalendarItem(items:CalendarItem[],next:CalendarItem):CalendarItem[]{return items.map(item=>item.item.id===next.item.id?next:item)}

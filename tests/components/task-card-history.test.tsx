@@ -11,7 +11,7 @@ vi.mock("../../components/api-client",()=>({apiFetch:apiMocks.apiFetch,getCalend
 import {TaskCard} from "../../components/task-card";
 
 const item:CalendarItem={
-  item:{id:"item-1",kind:"area",name:"Deep work",position:0,checklist:[]},
+  item:{id:"item-1",areaId:null,name:"Deep work",position:0,checklist:[]},
   date:"2026-09-12",
   targetMinutes:120,
   directMinutes:45,

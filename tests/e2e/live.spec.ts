@@ -34,9 +34,12 @@ test("confirmed account completes onboarding and uses real plan data",async({pag
   const settingsResponse=await settingsRequest;
   if(!settingsResponse.ok())throw new Error(`Onboarding draft save failed (${settingsResponse.status()}): ${await settingsResponse.text()}`);
   const areaInput=page.getByPlaceholder("e.g. Deep work");
+  await page.getByRole("button",{name:"Add area"}).click();
   await expect(areaInput).toBeVisible({timeout:5_000}).catch(async()=>{throw new Error(`Onboarding did not advance. Page content: ${await page.locator("body").innerText()}`)});
   await areaInput.fill("Software");
   await page.getByPlaceholder("e.g. Focused reading").fill("Build TrackMe");
+  await page.getByRole("combobox",{name:"Task area"}).click();
+  await page.getByRole("option",{name:"Software"}).click();
   await page.getByPlaceholder("e.g. Review priorities").first().fill("Review plan");
   await page.getByRole("button",{name:"Add checklist step"}).first().click();
   await page.getByPlaceholder("e.g. Review priorities").nth(1).fill("Write notes");
@@ -45,17 +48,26 @@ test("confirmed account completes onboarding and uses real plan data",async({pag
 
   await expect(page).toHaveURL(/\/en\/calendar$/);
   if((page.viewportSize()?.width??1024)<768)await page.locator('[data-testid="phone-month-indicators"]:has(span[title])').first().locator("..").click();
-  await expect((page.viewportSize()?.width??1024)<768?page.getByRole("dialog").getByRole("heading",{name:"Software"}):page.getByText("Software").first()).toBeVisible();
+  await expect((page.viewportSize()?.width??1024)<768?page.getByRole("dialog").getByRole("heading",{name:"Build TrackMe"}):page.getByText("Build TrackMe").first()).toBeVisible();
   await page.goto("/en/weekly-plan");
-  await expect(page.getByText("Software").first()).toBeVisible();
   await expect(page.getByText("Build TrackMe").first()).toBeVisible();
+  await page.goto("/en/areas");
+  await expect(page.getByRole("heading",{name:"Software"})).toBeVisible();
+  await page.getByRole("spinbutton",{name:"Daily target minutes"}).fill("60");
+  await page.getByRole("button",{name:"Save goal"}).first().click();
+  await expect(page.getByText("0 of 60 minutes")).toBeVisible();
+  const task=(await apiData<Array<{id:string;name:string}>>(await page.request.get("/api/v1/focus-items"))).find(item=>item.name==="Build TrackMe");
+  if(!task)throw new Error("Onboarded task was not found.");
+  await expect(await page.request.post("/api/v1/time-entries",{data:{itemId:task.id,date:localDate("Africa/Cairo"),minutes:25}})).toBeOK();
+  await page.reload();
+  await expect(page.getByText("25 of 60 minutes")).toBeVisible();
 });
 
 test("tracks Month and Week, edits schedules and checklists, completes, deletes, and archives",async({page},testInfo)=>{
   await login(page,email);
   const items=await apiData<Array<{id:string;name:string}>>(await page.request.get("/api/v1/focus-items"));
-  const area=items.find(item=>item.name==="Software");
-  if(!area)throw new Error("Onboarded Software focus area was not found.");
+  const area=items.find(item=>item.name==="Build TrackMe");
+  if(!area)throw new Error("Onboarded Build TrackMe task was not found.");
   const today=localDate("Africa/Cairo");
   await expect(await page.request.put(`/api/v1/date-overrides/${today}/${area.id}`,{data:{operation:"add",durationMinutes:60}})).toBeOK();
 
@@ -63,7 +75,7 @@ test("tracks Month and Week, edits schedules and checklists, completes, deletes,
   await expect(page.getByTestId("month-view")).toBeVisible();
   const mobile=testInfo.project.name==="mobile";
   if(mobile)await expect(page.locator(`[data-date="${today}"]`).getByTestId("phone-month-indicators")).toBeVisible();
-  else await expect(page.getByText("Software").first()).toBeVisible();
+  else await expect(page.getByText("Build TrackMe").first()).toBeVisible();
 
   await page.locator(`[data-date="${today}"]`).click();
   const dialog=page.getByRole("dialog",{name:"Day details"});
@@ -92,17 +104,17 @@ test("tracks Month and Week, edits schedules and checklists, completes, deletes,
   await dialog.getByRole("button",{name:"Close"}).click();
 
   await page.getByRole("button",{name:"Week"}).click();
-  if(mobile){await expect(page.getByTestId("phone-week-selector")).toBeVisible();await page.locator(`[data-date="${today}"]`).click();await expect(page.getByTestId("phone-week-stack")).toContainText("Software")}
+  if(mobile){await expect(page.getByTestId("phone-week-selector")).toBeVisible();await page.locator(`[data-date="${today}"]`).click();await expect(page.getByTestId("phone-week-stack")).toContainText("Build TrackMe")}
   else await expect(page.getByTestId("desktop-week-grid")).toBeVisible();
 
-  await page.goto("/en/settings");
+  await page.goto("/en/areas");
   await page.getByRole("textbox",{name:"New checklist step"}).first().fill("Prepare tomorrow");
   await page.getByRole("button",{name:"Add step"}).first().click();
-  await expect(page.getByRole("textbox",{name:"Checklist step label"}).last()).toHaveValue("Prepare tomorrow");
-  await page.getByRole("button",{name:"Archive"}).first().click();
+  await expect(page.getByText("Prepare tomorrow")).toBeVisible();
+  await page.getByRole("button",{name:"Archive task"}).first().click();
   await expect(page.getByRole("button",{name:"Restore"})).toBeVisible();
   await page.getByRole("button",{name:"Restore"}).click();
-  await expect(page.getByRole("button",{name:"Archive"}).first()).toBeVisible();
+  await expect(page.getByRole("button",{name:"Archive task"}).first()).toBeVisible();
 });
 
 test("keeps two signed-in browser accounts isolated",async({browser})=>{
@@ -111,14 +123,14 @@ test("keeps two signed-in browser accounts isolated",async({browser})=>{
     const first=await firstContext.newPage();const second=await secondContext.newPage();
     await login(first,email);await login(second,secondEmail);
     if(/\/onboarding$/.test(second.url())){
-      const response=await second.request.post("/api/v1/onboarding",{data:{effectiveFrom:localDate("Africa/Cairo"),draft:{language:"en",timezone:"Africa/Cairo",weekStart:6,items:[{clientId:"private-area",kind:"area",name:"Second account",checklist:[],weekdays:[1],target:"30"}]}}});
+      const response=await second.request.post("/api/v1/onboarding",{data:{effectiveFrom:localDate("Africa/Cairo"),draft:{language:"en",timezone:"Africa/Cairo",weekStart:6,areas:[],tasks:[{clientId:"private-task",name:"Second account",checklist:[],weekdays:[1],target:"30"}]}}});
       await expect(response).toBeOK();
     }
     const secret=`Isolation ${crypto.randomUUID()}`;
-    await expect(await first.request.post("/api/v1/focus-items",{data:{kind:"area",name:secret,position:99,checklist:[]}})).toBeOK();
+    await expect(await first.request.post("/api/v1/focus-items",{data:{name:secret,position:99,checklist:[]}})).toBeOK();
     const secondItems=await apiData<Array<{name:string}>>(await second.request.get("/api/v1/focus-items?includeArchived=true"));
     expect(secondItems.map(item=>item.name)).not.toContain(secret);
-    await second.goto("/en/settings");
+    await second.goto("/en/areas");
     await expect(second.getByText(secret)).toHaveCount(0);
   }finally{await firstContext.close();await secondContext.close()}
 });
